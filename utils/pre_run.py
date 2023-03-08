@@ -125,6 +125,7 @@ class OptimOptions(TestBaseOptions):
         self.parser.add_argument("--use_local_pos", default=1, type=int)
         self.parser.add_argument("--Wplus", type=int, default=1, help="Use Wplus space or not")
 
+
 class GenerateOptions(TestBaseOptions):
     def __init__(self):
         super(GenerateOptions, self).__init__()

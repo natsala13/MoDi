@@ -17,6 +17,7 @@ from op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
 
 from models.skeleton import SkeletonUnpool
 
+
 class PixelNorm(nn.Module):
     def __init__(self):
         super().__init__()
@@ -242,10 +243,11 @@ class ModulatedConv(nn.Module):
         self.mask = skeleton_traits.mask(self.weight, out_channel, kernel_size)
 
         norm_axis = skeleton_traits.norm_axis(self.weight)
-        fan_in = self.mask.sum(norm_axis, keepdims=True)  # number of weights that are not zeroed, not considering output channels and output joints
+        fan_in = self.mask.sum(norm_axis, keepdims=True)
+        # number of weights that are not zeroed, not considering output channels and output joints
         assert (fan_in[0, :] == fan_in[0, 0]).all()
-        fan_in = fan_in[:,:1]
-        # assert fan_in <= np.prod(self.mask.shape[skeleton_traits.norm_axis(self.weight)])  # in_channel x weight_volume
+        fan_in = fan_in[:, :1]
+        # assert fan_in <= np.prod(self.mask.shape[skeleton_traits.norm_axis(self.weight)]) # in_channel x weight_volume
         self.scale = nn.Parameter(1/(fan_in**0.5), requires_grad=False)
 
         self.modulation = EqualLinear(style_dim, in_channel, bias_init=1)
@@ -257,27 +259,33 @@ class ModulatedConv(nn.Module):
             self.demod_obj = None
         assert self.demod_obj in ['weights', 'data', None]
 
-    def forward(self, input, style): # input is the learned constant on lowest level call, and layer features on later calls. style is W[i].
+    def forward(self, input, style):  # input is the learned constant on lowest level call,
+        # and layer features on later calls. style is W[i].
         batch, in_channel, height, width = input.shape  # e.g.: [16, 256, 1, 4]
         st = self.skeleton_traits
 
         # output size of modulation is [batch, in_channel]
-        style = self.modulation(style).view(batch, 1, in_channel, 1, 1)  # A: Transform incoming W to style, i.e., std per feature.
+        style = self.modulation(style).view(batch, 1, in_channel, 1, 1)  # A: Transform incoming W to style, i.e.,
+        # std per feature.
         style = st.reshape_style(style)
 
         weight = self.weight * self.mask
 
         # multiply weight by a different std for each instance and each channel in the batch.
-        # scale: meaningles if demodulation is applied, because we multiply by scale and devide by it in the demodulation line.
-        #        if demodulation is NOT applied, scale pushes the std of the output to be defined by style, and removes the effects of the increasing std that happens due to convolutions
+        # scale: meaningles if demodulation is applied, because we multiply by scale and devide by
+        # it in the demodulation line.
+        #        if demodulation is NOT applied, scale pushes the std of the output to be defined by style,
+        #        and removes the effects of the increasing std that happens due to convolutions
         weight = self.scale * weight * style  # mult by fan_in and by predicted std
 
-        if self.demod_obj == 'weights': # scale weights s.t. output features' std will be 1
-            demod = torch.rsqrt(weight.pow(2).sum(st.norm_axis(weight), keepdims=True) + 1e-8)  # scaling factor: 1 / sqrt(sum(w^2)) for kernel and chnnels
+        if self.demod_obj == 'weights':  # scale weights s.t. output features' std will be 1
+            demod = torch.rsqrt(weight.pow(2).sum(st.norm_axis(weight), keepdims=True) + 1e-8)
+            # scaling factor: 1 / sqrt(sum(w^2)) for kernel and chnnels
             weight = weight * demod
 
         weight = weight.view(
-            (weight.shape[0] * weight.shape[1],) + weight.shape[2:]  # ==>  batch * out_channel_expanded, in_channel, kernel_height, kernel_width
+            (weight.shape[0] * weight.shape[1],) + weight.shape[2:]
+            # ==>  batch * out_channel_expanded, in_channel, kernel_height, kernel_width
         )
 
         weight = st.flip_if_needed(weight)
@@ -300,19 +308,20 @@ class ModulatedConv(nn.Module):
 
             out = st.transposed_conv_func(input, weight, padding=self.updown_pad, stride=st.updown_stride, groups=batch)
 
-            # reshape s.t. batch is in a seperate dim. works for both conv2 and conv3
+            # reshape s.t. batch is in a separate dim. works for both conv2 and conv3
             out = out.view((batch, self.out_channel) + out.shape[-2:])
 
-            # the blur is not making a significant change in size, just dropping the redundant rows/columns (e.g., from (3,9) to (2,8))
+            # the blur is not making a significant change in size,
+            # just dropping the redundant rows/columns (e.g., from (3,9) to (2,8))
             out = st.blur(self.blur, out)
 
-        else: # keep dims
-            input = st.reshape_input_before_conv(input, batch, width)  # ==>  batch, in_channel,[ 1,] in_height, in_width
-            input = input.view((1, batch * input.shape[1]) + input.shape[2:]) # ==> 1, batch*in_ch, ...
+        else:  # keep dims
+            input = st.reshape_input_before_conv(input, batch, width)  # ==>  batch, in_channel,[1,] in_height, in_width
+            input = input.view((1, batch * input.shape[1]) + input.shape[2:])  # ==> 1, batch*in_ch, ...
             out = st.conv_func(input, weight, padding=self.fixed_dim_pad, groups=batch)
-            out = st.reshape_output_after_conv(out) # ==> 1, batch*out_ch, height, width
+            out = st.reshape_output_after_conv(out)  # ==> 1, batch*out_ch, height, width
 
-            out = out.view(batch, self.out_channel, out.shape[2], out.shape[-1]) # ==> batch, out_ch, height, width
+            out = out.view(batch, self.out_channel, out.shape[2], out.shape[-1])  # ==> batch, out_ch, height, width
 
         if self.demod_obj == 'data':
             instance_std = out.std((2, 3), keepdim=True)  # batch x ch
@@ -322,7 +331,7 @@ class ModulatedConv(nn.Module):
 
 
 class ConstantInput(nn.Module):
-    def __init__(self, channel, size=(1,4)):
+    def __init__(self, channel, size=(1, 4)):
         super().__init__()
 
         self.input = nn.Parameter(torch.randn(1, channel, size[0], size[1]))
@@ -374,15 +383,18 @@ class ToXYZ(nn.Module):
         super().__init__()
 
         self.skel_aware = skeleton_traits.skeleton_aware()
-        if upsample: # this is true when applying the 'skip' branch, for upsampling the 'skip' features from previous hyrarchy level
+        if upsample: # this is true when applying the 'skip' branch,
+            # for upsampling the 'skip' features from previous hyrarchy level
 
             # upsample and unpool are destined for 'skip', which possesses the shape of prev hierarchy level
             self.upsample = skeleton_traits.upsample(blur_kernel)
             if self.skel_aware:
-                self.skeleton_unpool = SkeletonUnpool(pooling_list=skip_pooling_list, output_joints_num=skeleton_traits.larger_n_joints)
+                self.skeleton_unpool = SkeletonUnpool(pooling_list=skip_pooling_list,
+                                                      output_joints_num=skeleton_traits.larger_n_joints)
 
         # conv is destined for the input, which is already upsampled
-        self.conv = ModulatedConv(in_channel, entity.n_channels, 1, style_dim, demodulate=False, skeleton_traits=skeleton_traits)
+        self.conv = ModulatedConv(in_channel, entity.n_channels, 1, style_dim,
+                                  demodulate=False, skeleton_traits=skeleton_traits)
         self.bias = nn.Parameter(torch.zeros(1, entity.n_channels, 1, 1))
 
 
@@ -408,8 +420,8 @@ class Generator(nn.Module):
         n_mlp,
         blur_kernel=[1, 3, 3, 1],
         lr_mlp=0.01,
-        traits_class = None,
-        entity = None,
+        traits_class=None,
+        entity=None,
         n_inplace_conv=1
     ):
         super().__init__()
@@ -418,7 +430,8 @@ class Generator(nn.Module):
         n_joints = traits_class.n_joints(entity)
         self.n_channels = traits_class.n_channels(entity)
         self.n_frames = traits_class.n_frames(entity)
-        self.size = (n_joints[-1],self.n_frames[-1]) # unlike stylegan2 for images, here target size is a const. not used but kept here for similarity with original code
+        self.size = (n_joints[-1], self.n_frames[-1])  # unlike stylegan2 for images, here target size is a const.
+        # not used but kept here for similarity with original code
 
         self.style_dim = style_dim
 
@@ -432,16 +445,17 @@ class Generator(nn.Module):
                 )
             )
 
-        self.style = nn.Sequential(*layers)
+        self.style = nn.Sequential(*layers)  # MLP layer f: Z -> W.
         self.input = ConstantInput(self.n_channels[0], size=(n_joints[0], self.n_frames[0]))
         # end mapping network and constant
 
-
         skeleton_traits1 = traits_class(entity.parents_list[0], keep_skeletal_dims(n_joints[0]))
         self.conv1 = StyledConv(
-            self.n_channels[0], self.n_channels[0], 3, style_dim, blur_kernel=blur_kernel, skeleton_traits=skeleton_traits1
+            self.n_channels[0], self.n_channels[0], 3, style_dim,
+            blur_kernel=blur_kernel, skeleton_traits=skeleton_traits1
         )
-        self.to_xyz1 = ToXYZ(self.n_channels[0], style_dim, upsample=False, skeleton_traits=skeleton_traits1, entity=entity)
+        self.to_xyz1 = ToXYZ(self.n_channels[0], style_dim, upsample=False,
+                             skeleton_traits=skeleton_traits1, entity=entity)
 
         if traits_class.is_pool():
             n_inplace_conv -= 1  # the pooling block already contains one inplace convolution
