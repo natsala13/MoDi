@@ -264,8 +264,6 @@ class ModulatedConv(nn.Module):
         batch, in_channel, height, width = input.shape  # e.g.: [16, 256, 1, 4]
         st = self.skeleton_traits
 
-        import ipdb;ipdb.set_trace()
-
         # output size of modulation is [batch, in_channel]
         style = self.modulation(style).view(batch, 1, in_channel, 1, 1)  # A: Transform incoming W to style, i.e.,
         # std per feature.
