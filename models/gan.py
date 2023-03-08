@@ -572,8 +572,6 @@ class Generator(nn.Module):
 
                 latent = torch.cat([latent, latent2], 1)
 
-        import ipdb;ipdb.set_trace()
-
         out = self.input(latent)  # duplicate self.constant batch_size times. latent is used only to know batch size. out.shape is [16, 256, 1, 4]j or [16, 64, 6, 16]e
         out = self.conv1(out, latent[:, 0]) # out.shape is [16, 256, 1, 4]j / [16, 64, 6, 16]e (keep dims)
 
