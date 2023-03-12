@@ -8,6 +8,7 @@ from models.skeleton import SkeletonPool, SkeletonUnpool
 from utils.data import neighbors_by_distance
 from models.gan import Upsample
 
+
 class SkeletonTraits(nn.Module):
     # static variables
     channel_multiplier = 2
@@ -58,12 +59,14 @@ class SkeletonTraits(nn.Module):
         raise 'not implemented in base class'
 
     def weight_internal(self, in_channel, out_channel, kernel_size):
-         return torch.randn(self.out_channel_expanded(out_channel), in_channel, self.kernel_height(kernel_size), kernel_size)
+         return torch.randn(self.out_channel_expanded(out_channel), in_channel,
+                            self.kernel_height(kernel_size), kernel_size)
 
     def weight(self, in_channel, out_channel, kernel_size, modulation=False):
         weight = self.weight_internal(in_channel, out_channel, kernel_size)
         if modulation:
-            # the weird '1' at the front is a preparations for batch instances where each of them is weight multiplied by a scale that is specific to one instance
+            #  the weird '1' at the front is a preparations for batch instances where each of them is weight
+            #  multiplied by a scale that is specific to one instance
             weight = weight.unsqueeze(0)
         return nn.Parameter(weight)
 
@@ -274,8 +277,8 @@ class SkeletonAwareConv3DTraits(SkeletonAwareTraits):
         return mask
 
     def reshape_style(self, style):
-        assert (style.view(style.shape[:3] + (1,) + style.shape[3:]) == style[:,:,:,np.newaxis]).all()
-        return style[:,:,:,np.newaxis]  # add a dimention for out_j
+        assert (style.view(style.shape[:3] + (1,) + style.shape[3:]) == style[:, :, :, np.newaxis]).all()
+        return style[:, :, :, np.newaxis]  # add a dimension for out_j
 
     # conv3 dimensions are [batch, out_ch, in_ch, out_j, in_j, ker_wid]
     # demodulation should be ran over inch, in_j and ker_wid. the reason we don't run it on out_j is that
@@ -303,6 +306,7 @@ class SkeletonAwareConv3DTraits(SkeletonAwareTraits):
         """ because of padding dim 2. see docx drawing """
         weight = torch.flip(weight, (2,))
         return weight
+
 
 class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
 
@@ -365,7 +369,6 @@ class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
             input = pool(input)
         input = input.unsqueeze(3)
         return input
-
 
     @staticmethod
     def is_pool():

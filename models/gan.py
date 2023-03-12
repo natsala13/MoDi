@@ -262,12 +262,12 @@ class ModulatedConv(nn.Module):
     def forward(self, input, style):  # input is the learned constant on lowest level call,
         # and layer features on later calls. style is W[i].
         batch, in_channel, height, width = input.shape  # e.g.: [16, 256, 1, 4]
-        st = self.skeleton_traits
+        # self.skeleton_traits = self.skeleton_traits
 
         # output size of modulation is [batch, in_channel]
         style = self.modulation(style).view(batch, 1, in_channel, 1, 1)  # A: Transform incoming W to style, i.e.,
         # std per feature.
-        style = st.reshape_style(style)
+        style = self.skeleton_traits.reshape_style(style)
 
         weight = self.weight * self.mask
 
@@ -276,10 +276,10 @@ class ModulatedConv(nn.Module):
         # it in the demodulation line.
         #        if demodulation is NOT applied, scale pushes the std of the output to be defined by style,
         #        and removes the effects of the increasing std that happens due to convolutions
-        weight = self.scale * weight * style  # mult by fan_in and by predicted std
+        weight = self.scale * weight * style  # mult by fan_in and by predicted std# the scale multiplies the E dimension (2) and the style multiplies the channel one. (256)
 
         if self.demod_obj == 'weights':  # scale weights s.t. output features' std will be 1
-            demod = torch.rsqrt(weight.pow(2).sum(st.norm_axis(weight), keepdims=True) + 1e-8)
+            demod = torch.rsqrt(weight.pow(2).sum(self.skeleton_traits.norm_axis(weight), keepdims=True) + 1e-8)
             # scaling factor: 1 / sqrt(sum(w^2)) for kernel and chnnels
             weight = weight * demod
 
@@ -288,10 +288,10 @@ class ModulatedConv(nn.Module):
             # ==>  batch * out_channel_expanded, in_channel, kernel_height, kernel_width
         )
 
-        weight = st.flip_if_needed(weight)
+        weight = self.skeleton_traits.flip_if_needed(weight)
 
         if self.upsample:
-            input = st.reshape_input_before_transposed_conv(input, batch, width)  # ==>  batch, in_channel, in_height,[ 1,] in_width
+            input = self.skeleton_traits.reshape_input_before_transposed_conv(input, batch, width)  # ==>  batch, in_channel, in_height,[ 1,] in_width
             # batches become channel-like, so they can 'catch' the mod/demod operation
             input = input.view((1, batch * input.shape[1]) + input.shape[2:])
 
@@ -304,22 +304,22 @@ class ModulatedConv(nn.Module):
                 (batch * in_channel, self.out_channel_expanded) + weight.shape[3:]
             )
 
-            weight= st.reshape_weight_before_transposed_conv(weight, batch, in_channel, self.out_channel)
+            weight= self.skeleton_traits.reshape_weight_before_transposed_conv(weight, batch, in_channel, self.out_channel)
 
-            out = st.transposed_conv_func(input, weight, padding=self.updown_pad, stride=st.updown_stride, groups=batch)
+            out = self.skeleton_traits.transposed_conv_func(input, weight, padding=self.updown_pad, stride=self.skeleton_traits.updown_stride, groups=batch)
 
             # reshape s.t. batch is in a separate dim. works for both conv2 and conv3
             out = out.view((batch, self.out_channel) + out.shape[-2:])
 
             # the blur is not making a significant change in size,
             # just dropping the redundant rows/columns (e.g., from (3,9) to (2,8))
-            out = st.blur(self.blur, out)
+            out = self.skeleton_traits.blur(self.blur, out)
 
         else:  # keep dims
-            input = st.reshape_input_before_conv(input, batch, width)  # ==>  batch, in_channel,[1,] in_height, in_width
+            input = self.skeleton_traits.reshape_input_before_conv(input, batch, width)  # ==>  batch, in_channel,[1,] in_height, in_width
             input = input.view((1, batch * input.shape[1]) + input.shape[2:])  # ==> 1, batch*in_ch, ...
-            out = st.conv_func(input, weight, padding=self.fixed_dim_pad, groups=batch)
-            out = st.reshape_output_after_conv(out)  # ==> 1, batch*out_ch, height, width
+            out = self.skeleton_traits.conv_func(input, weight, padding=self.fixed_dim_pad, groups=batch)
+            out = self.skeleton_traits.reshape_output_after_conv(out)  # ==> 1, batch*out_ch, height, width
 
             out = out.view(batch, self.out_channel, out.shape[2], out.shape[-1])  # ==> batch, out_ch, height, width
 
@@ -504,7 +504,8 @@ class Generator(nn.Module):
             in_channel = out_channel
 
         # number of style codes to be injected (w height)
-        self.n_latent = self.n_total_conv_layers + 1 #(len(n_joints)-1) * 3  + 2 # 1st level gets latent[0], next each level i gets latent[i*2-1,i*2], motion (i.e. last skip) gets i*2+1
+        self.n_latent = self.n_total_conv_layers + 1  # (len(n_joints)-1) * 3  + 2 # 1st level gets latent[0],
+        # next each level i gets latent[i*2-1,i*2], motion (i.e. last skip) gets i*2+1
 
         # keep names of parameters that should have required_grad=False
         self.non_grad_params = []
@@ -573,7 +574,7 @@ class Generator(nn.Module):
                 latent = torch.cat([latent, latent2], 1)
 
         out = self.input(latent)  # duplicate self.constant batch_size times. latent is used only to know batch size. out.shape is [16, 256, 1, 4]j or [16, 64, 6, 16]e
-        out = self.conv1(out, latent[:, 0]) # out.shape is [16, 256, 1, 4]j / [16, 64, 6, 16]e (keep dims)
+        out = self.conv1(out, latent[:, 0])  # out.shape is [16, 256, 1, 4]j / [16, 64, 6, 16]e (keep dims)
 
         motion = list()
         skip = self.to_xyz1(out, latent[:, 1]) # skip.shape is [16, 3, 1, 4]j [16, 4, 6, 16]e
@@ -629,7 +630,7 @@ class ConvLayer(nn.Sequential):
             stride = skeleton_traits.updown_stride
             padding = skeleton_traits.updown_pad(kernel_size)
 
-        else: # keep dims
+        else:  # keep dims
             stride = 1
             padding = skeleton_traits.fixed_dim_pad(kernel_size)
 

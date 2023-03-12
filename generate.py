@@ -86,7 +86,7 @@ def sample(args, g_ema, device, mean_latent):
             print(f'Done sampling {i+1} motions.')
 
         # to_cpu is used becuase advanced python versions cannot assign a cuda object to a dataframe
-        generated_motion.loc[seed,'motion'] = to_cpu(motion)
+        generated_motion.loc[seed, 'motion'] = to_cpu(motion)
         generated_motion.loc[seed, 'W'] = to_cpu(W)
 
     if args.no_idle:
@@ -210,6 +210,7 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
             for seed in generated_motion.index:
                 assert generated_motion.W[seed].ndim == 3 and generated_motion.W[seed].shape[0] == 1
                 np.save(osp.join(out_path, 'Wplus_{}.npy'.format(seed)), generated_motion.W[seed][0].cpu().numpy())
+                # np.save(osp.join(out_path, f'golden_smaple_{seed}.npy'), generated_motion.motion[seed][0].cpu().numpy())
 
         # save motions
         motion_np, _ = get_gen_mot_np(args, generated_motion['motion'], mean_joints, std_joints)
