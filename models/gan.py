@@ -295,7 +295,7 @@ class ModulatedConv(nn.Module):
             # batches become channel-like, so they can 'catch' the mod/demod operation
             input = input.view((1, batch * input.shape[1]) + input.shape[2:])
 
-            weight = weight.view( # undo the view operation from before (keep for similarity with original code)
+            weight = weight.view(  # undo the view operation from before (keep for similarity with original code)
                 (batch, -1) + weight.shape[1:]
             )
             # switch places between in_ch and out_ch
@@ -304,9 +304,11 @@ class ModulatedConv(nn.Module):
                 (batch * in_channel, self.out_channel_expanded) + weight.shape[3:]
             )
 
-            weight= self.skeleton_traits.reshape_weight_before_transposed_conv(weight, batch, in_channel, self.out_channel)
+            weight = self.skeleton_traits.reshape_weight_before_transposed_conv(weight, batch,
+                                                                                in_channel, self.out_channel)
 
-            out = self.skeleton_traits.transposed_conv_func(input, weight, padding=self.updown_pad, stride=self.skeleton_traits.updown_stride, groups=batch)
+            out = self.skeleton_traits.transposed_conv_func(input, weight, padding=self.updown_pad,
+                                                            stride=self.skeleton_traits.updown_stride, groups=batch)
 
             # reshape s.t. batch is in a separate dim. works for both conv2 and conv3
             out = out.view((batch, self.out_channel) + out.shape[-2:])
