@@ -248,7 +248,7 @@ class SkeletonAwareTraits(SkeletonTraits):
 
     @staticmethod
     def n_joints(entity):
-        return [len(parents) for parents in entity.parents_list] #[1, 2, 6, 10, 15]
+        return [len(parents) for parents in entity.parents_list]  # TODO: just return entity.n_edges
 
     @classmethod
     def n_levels(cls, entity):

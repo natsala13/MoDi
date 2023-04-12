@@ -93,7 +93,7 @@ class Joint():
     parents_list = list(map(np.array, parents_list))  # convert list items to np
 
 
-class Edge():
+class Edge:
     n_channels = 4
 
     @staticmethod
