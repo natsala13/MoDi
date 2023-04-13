@@ -37,29 +37,33 @@
     -> Traits uses entity to call n_edges.
 
 *** QUESTIONS
-* skeleton pull dist 0 - what is the logic?
--> spatial pooling.
-* why arnt edge and joints (parents list) consistent? do we need both of them? They are supposed to be consistent,
--> Better to work just with indeces instead.
-* EdgePoint class - Yes or No? any more data annotations?
-* init with args instead of class constants - n_channels, root_loc, foot_loc...
--> Yes only init.
+* why arnt edge and joints (parents list) consistent? do we need both of them? They are supposed to be consistent.
+-> for some reason parent list is edges indexes in edge list.
+* Whats the use of enable foot contact? it adds edges to parent list.
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
 * The end goal is to train a model using my new construction letting generate a skeleton's model dynamically.
+* Root location and feet position
+    -> during pooling root position and feet contact remain (almost) independent
+    -> during convolution both are neigbhoor of something,... to check.
 
 ### TODO: Steps
 [v] stop using edges -> move to parents lists. DONE (I still save edges for simplicity...)
-[ ] start using git.
-[ ] add root position.
-[ ] add foot location.
+[v] update git.
+[v] add root position.
+[v] add foot location.
+[X] pooling for after rest position. - MAKE AUTOMATIC
 [ ] return offsets.
 [ ] Create dynamic class.
+[ ] Reverse parent list order.
+[ ] Neighbors list
+[ ] Remove root position and foot contact.
 
 [ ] make generation working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
 [ ] save bvh correctly?
+[ ] make skeleton dist1 and dist0 pooling the same - its just mean/max pooling vs spatial pooling from same list.
 
 """
 
@@ -77,6 +81,8 @@ PATH = '/Users/nathansala/tau/code/MoDi/data/edge_rot_data.npy'
 BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
 
+LEFT_FOOT_NAME = 'LeftFoot'
+RIGHT_FOOT_NAME = 'RightFoot'
 
 npy_data = np.load(PATH, allow_pickle=True)
 
@@ -154,13 +160,15 @@ class StaticData:
         return self.enable_global_position_flag
 
     def enable_global_position(self):
-        """ add a special entity that would be the global position.
+        """
+        TODO: Fooly understand why is it for...
+        add a special entity that would be the global position.
         The entity is appended to the edges list.
         No need to really add it in edges_list and all the other structures that are based on tupples. We add it only
         to the structures that are based on indices.
         Its neighboring edges are the same as the neightbors of root """
 
-        if self.enable_global_position:
+        if self.enable_global_position_flag:
             return
         self.enable_global_position_flag = True
 
@@ -173,35 +181,56 @@ class StaticData:
         for parents in self.parent_list:
             parents.append(-2)
 
-    @property
     def is_foot_contact_enabled(self, level=-1):
         # return any([isinstance(parent, tuple) and parent[0] == -3 for parent in cls.parents_list[level]])
         return self.enable_foot_contact_flag
+
+    def _foot_indexes(self):
+        """Run overs pooling list and calculate foot location at each level"""
+        foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
+        all_foot_indexes = [foot_indexes]
+        for pooling in self.skeletal_pooling_dist_1:
+            all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
+
+        return all_foot_indexes
 
     def enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
         The entities are appended to the edges list.
         No need to really add them in edges_list and all the other structures that are based on tuples. We add them only
         to the structures that are based on indices.
-        Their neighboring edges are the same as the neightbors of the feet """
+        Their neighboring edges are the same as the neighbors of the feet """
 
         if self.enable_foot_contact_flag:
-            # if enable_global_position has already been called before, do nothing
             return
+
         self.enable_foot_contact_flag = True
 
-        for hierarchical_stage_idx, (feet_idx, parents) in enumerate(zip(cls.feet_idx_list, cls.parents_list)):
-            for idx, foot in enumerate(feet_idx):
-                # new entry's 'parent' would be a tuple (-3, foot)
-                parents.append((-3, foot))
+        all_foot_indeces = self._foot_indexes()
 
-                if hierarchical_stage_idx < cls.n_hierarchical_stages - 1:  # update pooling only for stages lower than last
-                    last_idx_this = cls.n_edges[hierarchical_stage_idx] + idx
-                    last_idx_larger = cls.n_edges[hierarchical_stage_idx + 1] + idx
-                    for pooling_list in [cls.skeletal_pooling_dist_0, cls.skeletal_pooling_dist_1]:
-                        # last entry in current hierarchy pools from last entry in larger hierarchy
-                        pooling_list[hierarchical_stage_idx][last_idx_this] = [last_idx_larger]
-        cls.n_edges = [len(parents) for parents in cls.parents_list]  # num edges after adding feet
+        for parent, foot_indeces in zip(self.parent_list, all_foot_indeces):
+            for foot_index in foot_indeces:
+                parent.append((-3, foot_index))
+
+        for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
+            for pooling_hierarchical_stage, foot_indeces in zip(pooling_list, all_foot_indeces):  # TODO: Do not update the last one
+                for _ in foot_indeces:
+                    n_small_stage = max(pooling_hierarchical_stage.keys()) + 1
+                    n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
+                    pooling_hierarchical_stage[n_small_stage] = [n_large_stage]
+
+
+        # for hierarchical_stage_idx, (feet_idx, parents) in enumerate(zip(cls.feet_idx_list, cls.parents_list)):
+        #     for idx, foot in enumerate(feet_idx):
+        #         # new entry's 'parent' would be a tuple (-3, foot)
+        #         parents.append((-3, foot))
+        #
+        #         if hierarchical_stage_idx < cls.n_hierarchical_stages-1:  # update pooling only for stages lower than last
+        #             last_idx_this = cls.n_edges[hierarchical_stage_idx] + idx
+        #             last_idx_larger = cls.n_edges[hierarchical_stage_idx+1] + idx
+        #             for pooling_list in [cls.skeletal_pooling_dist_0, cls.skeletal_pooling_dist_1]:
+        #                 # last entry in current hierarchy pools from last entry in larger hierarchy
+        #                 pooling_list[hierarchical_stage_idx][last_idx_this] = [last_idx_larger]
 
     @staticmethod
     def _topology_degree(parents: [int]):
@@ -232,6 +261,32 @@ class StaticData:
         return all_sequences
 
     @staticmethod
+    def _find_leaves(index: int, joints_degree: [int], parents: [int]) -> [[int]]:
+        """Recursive search to find a list of all leaves and their connected joint in a skeleton rest position"""
+        if joints_degree[index] == 0:
+            return []
+
+        all_leaves_pool = []
+        connected_leaves = []
+        # if joints_degree[index] > 1 and index != 0:
+        #     all_sequences = [[index]]
+
+        children_list = [dst for dst, src in enumerate(parents) if src == index]
+
+        for dst in children_list:
+            leaves = StaticData._find_leaves(dst, joints_degree, parents)
+            if leaves:
+                all_leaves_pool += leaves
+            else:
+                connected_leaves += [dst]
+
+        if connected_leaves:
+            all_leaves_pool += [[index] + connected_leaves]
+
+        return all_leaves_pool
+
+
+    @staticmethod
     def _edges_from_joints(joints: [int]):
         return [(src, dst) for src, dst in zip(joints[:-1], joints[1:])]
 
@@ -245,13 +300,14 @@ class StaticData:
         return {k: sublist[k] for sublist in values for k in sublist}
 
     @staticmethod
-    def _calculate_pooling_for_level(parents: [int]) -> {EdgePoint: [EdgePoint]}:
-        degree = StaticData._topology_degree(parents)
+    def _calculate_degree1_pooling(parents: [int], degree: [int]) -> {EdgePoint: [EdgePoint]}:
+        """Pooling for complex skeleton by trimming long sequences into smaller ones."""
         all_sequences = StaticData._find_seq(0, degree, parents)
         edges_sequences = [StaticData._edges_from_joints(seq) for seq in all_sequences]
 
         # TODO: Lets keep it to parent lists - I am not sure I want this.
-        pooling = [{(edge[0][0], edge[-1][-1]): edge for edge in StaticData._pooling_for_edges_list(edges)} for edges in edges_sequences]
+        pooling = [{(edge[0][0], edge[-1][-1]): edge for edge in StaticData._pooling_for_edges_list(edges)} for edges in
+                   edges_sequences]
         pooling = StaticData.flatten_dict(pooling)
 
         # pooling2 = [{joints[-1]: joints for joints in StaticData._pooling_for_edges_list(joints_sequence[1:])} for joints_sequence in
@@ -259,6 +315,28 @@ class StaticData:
         # pooling2 = StaticData.flatten_dict(pooling2)
 
         return pooling
+
+    @staticmethod
+    def _calculate_leaves_pooling(parents: [int], degree: [int]) -> {EdgePoint: [EdgePoint]}:
+        # all_leaves = StaticData._find_leaves(0, degree, parents)
+        all_sequences = StaticData._find_seq(0, degree, parents)
+        edges_sequences = [StaticData._edges_from_joints(seq) for seq in all_sequences]
+
+        all_joints = [joint for joint, d in enumerate(degree) if d > 0]
+        pooling = {}
+
+        for joint in all_joints:
+            pooling[joint] = [edge[0] for edge in edges_sequences if edge[0][0] == joint]
+
+        return {pooling[k][0]: pooling[k] for k in pooling}
+
+
+    @staticmethod
+    def _calculate_pooling_for_level(parents: [int], degree: [int]) -> {EdgePoint: [EdgePoint]}:
+        if any(d == 1 for d in degree):
+            return StaticData._calculate_degree1_pooling(parents, degree)
+        else:
+            return StaticData._calculate_leaves_pooling(parents, degree)
 
     @staticmethod
     def _normalise_joints(pooling: {EdgePoint: [EdgePoint]}) -> {EdgePoint: [EdgePoint]}:
@@ -280,20 +358,29 @@ class StaticData:
     def _edges_to_parents(edges: [EdgePoint]):
         return [-1] + [edge[0] for edge in edges]
 
-    def calculate_all_pooling_levels(self, parents):
+    def calculate_all_pooling_levels(self, parents0):
         # pooling = self._calculate_pooling_for_level(self.parents)
-        all_parents = [list(parents)]
+        all_parents = [list(parents0)]
         all_poolings = []
+        degree = StaticData._topology_degree(all_parents[-1])
 
-        # while not all_parents[-1] == list(pooling.keys()):
-        for _ in range(3):
-            pooling = self._calculate_pooling_for_level(all_parents[-1])
+        while any(d == 1 for d in degree):
+        # for _ in range(3):
+        #     pooling = self._calculate_pooling_for_level(all_parents[-1], degree)
+            pooling = self._calculate_degree1_pooling(all_parents[-1], degree)
 
             normalised_pooling = self._normalise_joints(pooling)
-
             normalised_parents = self._edges_to_parents(normalised_pooling.keys())
+
             all_parents += [normalised_parents]
             all_poolings += [normalised_pooling]
+
+            degree = StaticData._topology_degree(all_parents[-1])
+
+        # TODO: make pooling after primal skeleton automatic.
+        all_parents += [[-1, 0, 1], [-1, 0]]
+        all_poolings += [{(0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
+                         {(0, 1): [(0, 1), (1, 2)]}]
 
         return all_parents, all_poolings
 
@@ -344,8 +431,8 @@ def degree(static):
 
 
 @pytest.fixture(autouse=True)
-def pooling(static):
-    return static._calculate_pooling_for_level(static.parent_list[0])
+def pooling(static, degree):
+    return static._calculate_pooling_for_level(static.parent_list[0], degree)
 
 
 def test_parents(static):
@@ -384,13 +471,13 @@ def test_pooling_normalised(pooling):
 
 
 def test_all_parents(static):
-    assert static.parent_list == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
+    assert static.parent_list[:-2] == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
                            [-1, 0, 1, 2, 3, 2, 5, 6, 2, 8, 9, 0, 11, 0, 13], [-1, 0, 1, 1, 3, 1, 5, 0, 0],
                            [-1, 0, 1, 1, 1, 0, 0]]
 
 
 def test_all_pooling(static):
-    assert static.skeletal_pooling_dist_1_edges == [
+    assert static.skeletal_pooling_dist_1_edges[:-2] == [
         {(0, 1): [(0, 1), (1, 2)], (1, 2): [(2, 3), (3, 4)], (2, 3): [(4, 5), (5, 6)], (3, 4): [(6, 7)],
          (2, 5): [(4, 8), (8, 9)], (5, 6): [(9, 10), (10, 11)], (6, 7): [(11, 12)], (2, 8): [(4, 13), (13, 14)],
          (8, 9): [(14, 15), (15, 16)], (9, 10): [(16, 17)], (0, 11): [(0, 18), (18, 19)],
