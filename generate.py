@@ -168,7 +168,7 @@ def get_gen_mot_np(args, generated_motion, mean_joints, std_joints):
     return generated_motion, index
 
 
-def generate(args, g_ema, device, mean_joints, std_joints, entity):
+def generate(args, g_ema, device, mean_joints, std_joints, static):
 
     type2func = {'interp': interpolate, 'sample': sample, 'edit': edit}
     with torch.no_grad():
@@ -176,10 +176,10 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
         mean_latent = g_ema.mean_latent(args.truncation_mean)
         generated_motions = type2func[args.type](args, g_ema, device, mean_latent)
 
-    if entity.str() == 'Joint':
+    if static.str() == 'Joint':
         edge_rot_dict_general = None
     else:
-        _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))
+        _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))  # TODO: Remove use of that dictionnary.
         edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
         edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
 
@@ -193,8 +193,9 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
             out_path = f'{out_path}_{args.motions}'
         os.makedirs(out_path, exist_ok=True)
     root_out_path = out_path
-    if not isinstance(generated_motions, tuple):
-        generated_motions = (generated_motions,)
+
+    generated_motions = (generated_motions,) if not isinstance(generated_motions, tuple) else generated_motions
+
     for generated_motion in generated_motions:
         out_path = root_out_path
         if isinstance(generated_motion, tuple):
@@ -221,7 +222,7 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
         n_motions = min(10, len(motion_np))
         fig = motion2fig(motion_np, H=512, W=512, n_sampled_motions=n_motions,
                          n_sampled_frames=n_sampled_frames,
-                         entity=entity.str(), edge_rot_dict_general=edge_rot_dict_general)
+                         entity=static.str(), edge_rot_dict_general=edge_rot_dict_general)
         prefix_no_underscore = prefix.replace('_', '')
         fig_name = osp.join(out_path, f'{prefix_no_underscore}.png')
         dpi = max(n_motions, n_sampled_frames) * 100
@@ -237,7 +238,7 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
                 cluster_label = torch.argmax(cluster_label).item()
                 id = f'g{cluster_label:02d}_{id}'
             motion2bvh(motion_np[i], osp.join(out_path, f'{prefix}{id}.bvh'),
-                       parents=entity.parents_list, type=args.type, entity=entity.str(),
+                       parents=static.parents_list, type=args.type, entity=static.str(),
                        edge_rot_dict_general=edge_rot_dict_general)
 
     # save args
@@ -262,7 +263,7 @@ def main(args_not_parsed):
     parser = GenerateOptions()
     args = parser.parse_args(args_not_parsed)
     device = args.device
-    g_ema, discriminator, checkpoint, entity, mean_joints, std_joints = load_all_form_checkpoint(args.ckpt, args)
+    g_ema, discriminator, checkpoint, static, mean_joints, std_joints = load_all_form_checkpoint(args.ckpt, args)
     out_path = generate(args, g_ema, device, mean_joints, std_joints, entity=entity)
     return out_path
 

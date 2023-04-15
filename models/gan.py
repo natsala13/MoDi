@@ -16,6 +16,7 @@ from torch.nn import functional as F
 from op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
 
 from models.skeleton import SkeletonUnpool
+from motion_class import StaticData
 
 
 class PixelNorm(nn.Module):
@@ -381,7 +382,7 @@ class StyledConv(nn.Module):
 
 class ToXYZ(nn.Module):
     def __init__(self, in_channel, style_dim, upsample=True, blur_kernel=[1, 3, 3, 1],
-                 skeleton_traits=None, skip_pooling_list=None, entity=None):
+                 skeleton_traits=None, skip_pooling_list=None, static: StaticData=None):
         super().__init__()
 
         self.skel_aware = skeleton_traits.skeleton_aware()
@@ -395,9 +396,9 @@ class ToXYZ(nn.Module):
                                                       output_joints_num=skeleton_traits.larger_n_joints)
 
         # conv is destined for the input, which is already upsampled
-        self.conv = ModulatedConv(in_channel, entity.n_channels, 1, style_dim,
+        self.conv = ModulatedConv(in_channel, static.n_channels, 1, style_dim,
                                   demodulate=False, skeleton_traits=skeleton_traits)
-        self.bias = nn.Parameter(torch.zeros(1, entity.n_channels, 1, 1))
+        self.bias = nn.Parameter(torch.zeros(1, static.n_channels, 1, 1))
 
 
     def forward(self, input, style, skip=None):
@@ -423,15 +424,15 @@ class Generator(nn.Module):
         blur_kernel=[1, 3, 3, 1],
         lr_mlp=0.01,
         traits_class=None,
-        entity=None,
+        static=None,
         n_inplace_conv=1
     ):
         super().__init__()
 
         self.traits_class = traits_class
-        n_joints = traits_class.n_joints(entity)
-        self.n_channels = traits_class.n_channels(entity)
-        self.n_frames = traits_class.n_frames(entity)
+        n_joints = traits_class.n_joints(static)
+        self.n_channels = traits_class.n_channels(static)
+        self.n_frames = traits_class.n_frames(static)
         self.size = (n_joints[-1], self.n_frames[-1])  # unlike stylegan2 for images, here target size is a const.
         # not used but kept here for similarity with original code
 
@@ -451,13 +452,13 @@ class Generator(nn.Module):
         self.input = ConstantInput(self.n_channels[0], size=(n_joints[0], self.n_frames[0]))
         # end mapping network and constant
 
-        skeleton_traits1 = traits_class(entity.parents_list[0], keep_skeletal_dims(n_joints[0]))
+        skeleton_traits1 = traits_class(static.parents_list[0], keep_skeletal_dims(n_joints[0]))
         self.conv1 = StyledConv(
             self.n_channels[0], self.n_channels[0], 3, style_dim,
             blur_kernel=blur_kernel, skeleton_traits=skeleton_traits1
         )
         self.to_xyz1 = ToXYZ(self.n_channels[0], style_dim, upsample=False,
-                             skeleton_traits=skeleton_traits1, entity=entity)
+                             skeleton_traits=skeleton_traits1, static=static)
 
         if traits_class.is_pool():
             n_inplace_conv -= 1  # the pooling block already contains one inplace convolution
@@ -688,25 +689,25 @@ class ResBlock(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, blur_kernel=[1, 3, 3, 1], traits_class=None, entity=None, n_inplace_conv=1):
+    def __init__(self, blur_kernel=[1, 3, 3, 1], traits_class=None, static=None, n_inplace_conv=1):
         super().__init__()
 
         if traits_class.is_pool():
             n_inplace_conv -= 1  # the pooling block already contains one inplace convolution
-        n_joints = traits_class.n_joints(entity)
-        self.n_channels = traits_class.n_channels(entity)
-        self.n_frames = traits_class.n_frames(entity)
-        self.n_levels = traits_class.n_levels(entity)
+        n_joints = traits_class.n_joints(static)
+        self.n_channels = traits_class.n_channels(static)
+        self.n_frames = traits_class.n_frames(static)
+        self.n_levels = traits_class.n_levels(static)
 
-        skeleton_traits = traits_class(parents=entity.parents_list[-1], pooling_list=keep_skeletal_dims(n_joints[-1]))
-        convs = [ConvLayer(entity.n_channels, self.n_channels[-1], 1, skeleton_traits=skeleton_traits)] # channel-wise expansion. keep dims. kernel=1
+        skeleton_traits = traits_class(parents=static.parents_list[-1], pooling_list=keep_skeletal_dims(n_joints[-1]))
+        convs = [ConvLayer(static.n_channels, self.n_channels[-1], 1, skeleton_traits=skeleton_traits)] # channel-wise expansion. keep dims. kernel=1
 
         in_channel = self.n_channels[-1]
 
         for i in range(self.n_levels-1, 0, -1):
             out_channel = self.n_channels[i-1]
-            skeleton_traits_for_kernel_3 = traits_class(entity.parents_list[i], entity.skeletal_pooling_dist_1[i - 1])
-            skeleton_traits_for_kernel_1 = traits_class(entity.parents_list[i], entity.skeletal_pooling_dist_0[i - 1])
+            skeleton_traits_for_kernel_3 = traits_class(static.parents_list[i], static.skeletal_pooling_dist_1[i - 1])
+            skeleton_traits_for_kernel_1 = traits_class(static.parents_list[i], static.skeletal_pooling_dist_0[i - 1])
 
             convs.append(ResBlock(in_channel, out_channel, blur_kernel, skeleton_traits_for_kernel_3,
                                   skeleton_traits_for_kernel_1, n_inplace_conv))
@@ -718,7 +719,7 @@ class Discriminator(nn.Module):
         self.stddev_group = 4
         self.stddev_feat = 1
 
-        skeleton_traits = traits_class(entity.parents_list[0], keep_skeletal_dims(n_joints[0]))
+        skeleton_traits = traits_class(static.parents_list[0], keep_skeletal_dims(n_joints[0]))
         self.final_conv = ConvLayer(in_channel + 1, self.n_channels[0], 3, skeleton_traits=skeleton_traits) # channels 257-->256, keep dims, kernel=3
         self.final_linear = nn.Sequential(
             EqualLinear(self.n_channels[0] * n_joints[0] * self.n_frames[0], self.n_channels[0], activation='fused_lrelu'),

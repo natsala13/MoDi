@@ -14,11 +14,11 @@
 # [-1, 0, 1, 2, 3, 4, 3, 6, 7, 8, 3, 10, 11, 12, 0, 14, 15, 0, 17, 18]
 #
 # edge_rot_dict['names_with_root']
-# array(['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head',
+# names =['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head',
 #        'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
 #        'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
 #        'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg',
-#        'RightFoot'], dtype='<U40')
+#        'RightFoot']
 """ Design change
 * traits class should be used the same - record that each instance needs some parent and pooling list.
 * Motion class should replace Edge class - answer to all its needs.
@@ -54,6 +54,7 @@
 [v] add root position.
 [v] add foot location.
 [X] pooling for after rest position. - MAKE AUTOMATIC
+[ ] reverse lists
 [ ] return offsets.
 [ ] Create dynamic class.
 [ ] Reverse parent list order.
@@ -64,6 +65,8 @@
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
 [ ] save bvh correctly?
 [ ] make skeleton dist1 and dist0 pooling the same - its just mean/max pooling vs spatial pooling from same list.
+[ ] look up pre process edges - makes some preprocessing on all bvh data before using it.
+[ ] Maybe change the skeleton traits to hold a static object.
 
 """
 
@@ -118,6 +121,10 @@ class StaticData:
         self.__n_channels = n_channels
         self.enable_global_position_flag = enable_global_position
         self.enable_foot_contact_flag = enable_foot_contact
+
+    @staticmethod
+    def str():  # TODO: Understand how to remove that.
+        return 'Edge'
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str):

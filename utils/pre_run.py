@@ -5,6 +5,8 @@ import torch
 from models.gan import Generator, Discriminator
 from utils.data import Edge, motion_from_raw
 
+from motion_class import StaticData
+
 # region Parser Options
 class BaseOptions:
     def __init__(self):
@@ -149,6 +151,7 @@ class GenerateOptions(TestBaseOptions):
         parser.add_argument('--boundary_path', type=str, help='Path to boundary file')
         parser.add_argument('--edit_radius', type=float,
                             help='Editing radius (i.e., max change of W in editing direction)')
+        parser.add_argument('--bvh', type=str, default='tests/motion0.bvh', help='Path to bvh containing motion topology')
 
 class EvaluateOptions(TestBaseOptions):
     def __init__(self):
@@ -268,15 +271,15 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
 
     traits_class = setup_env(args, get_traits=True)
 
-    entity = eval(args.entity)
+    static = StaticData.init_from_bvh(args.bvh)
 
     g_ema = Generator(
-        args.latent, args.n_mlp, traits_class=traits_class, entity=entity, n_inplace_conv=args.n_inplace_conv
+        args.latent, args.n_mlp, traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
     ).to(args.device)
 
     g_ema.load_state_dict(checkpoint["g_ema"])
 
-    discriminator = Discriminator(traits_class=traits_class, entity=entity, n_inplace_conv=args.n_inplace_conv
+    discriminator = Discriminator(traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
                                   ).to(args.device)
 
     discriminator.load_state_dict(checkpoint["d"])
@@ -293,4 +296,4 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
 
         return g_ema, discriminator, motion_data, mean_latent, edge_rot_dict_general
 
-    return g_ema, discriminator, checkpoint, entity, mean_joints, std_joints
+    return g_ema, discriminator, checkpoint, static, mean_joints, std_joints
