@@ -83,6 +83,7 @@ from utils.data import Edge
 PATH = '/Users/nathansala/tau/code/MoDi/data/edge_rot_data.npy'
 BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
+BVH_SALUTE = 'tests/Salute.bvh'
 
 LEFT_FOOT_NAME = 'LeftFoot'
 RIGHT_FOOT_NAME = 'RightFoot'
@@ -196,7 +197,7 @@ class StaticData:
         """Run overs pooling list and calculate foot location at each level"""
         foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
         all_foot_indexes = [foot_indexes]
-        for pooling in self.skeletal_pooling_dist_1:
+        for pooling in self.skeletal_pooling_dist_1.reverse():
             all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
 
         return all_foot_indexes
@@ -389,7 +390,7 @@ class StaticData:
         all_poolings += [{(0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
                          {(0, 1): [(0, 1), (1, 2)]}]
 
-        return all_parents, all_poolings
+        return all_parents[::-1], all_poolings[::-1]
 
     def plot(self, parents):
         graph = nx.Graph()
@@ -433,17 +434,22 @@ def static():
 
 
 @pytest.fixture(autouse=True)
-def degree(static):
-    return static._topology_degree(static.parents_list[0])
+def parents(static):
+    return static.parents_list[-1]
 
 
 @pytest.fixture(autouse=True)
-def pooling(static, degree):
-    return static._calculate_pooling_for_level(static.parents_list[0], degree)
+def degree(static, parents):
+    return static._topology_degree(parents)
 
 
-def test_parents(static):
-    assert static.parents_list[0] == [-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4,
+@pytest.fixture(autouse=True)
+def pooling(static, degree, parents):
+    return static._calculate_pooling_for_level(parents, degree)
+
+
+def test_parents(parents):
+    assert parents == [-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4,
                                       13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24]
 
 
@@ -451,8 +457,8 @@ def test_degree(degree):
     assert degree == [3, 1, 1, 1, 3, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0]
 
 
-def test_sequences(static, degree):
-    seq = static._find_seq(0, degree, static.parents_list[0])
+def test_sequences(static, degree, parents):
+    seq = static._find_seq(0, degree, parents)
     assert seq == [[0, 1, 2, 3, 4], [4, 5, 6, 7], [4, 8, 9, 10, 11, 12], [4, 13, 14, 15, 16, 17], [0, 18, 19, 20, 21],
                    [0, 22, 23, 24, 25]]
 
@@ -478,13 +484,13 @@ def test_pooling_normalised(pooling):
 
 
 def test_all_parents(static):
-    assert static.parents_list[:-2] == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
+    assert static.parents_list[::-1][:-2] == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
                                         [-1, 0, 1, 2, 3, 2, 5, 6, 2, 8, 9, 0, 11, 0, 13], [-1, 0, 1, 1, 3, 1, 5, 0, 0],
                                         [-1, 0, 1, 1, 1, 0, 0]]
 
 
 def test_all_pooling(static):
-    assert static.skeletal_pooling_dist_1_edges[:-2] == [
+    assert static.skeletal_pooling_dist_1_edges[::-1][:-2] == [
         {(0, 1): [(0, 1), (1, 2)], (1, 2): [(2, 3), (3, 4)], (2, 3): [(4, 5), (5, 6)], (3, 4): [(6, 7)],
          (2, 5): [(4, 8), (8, 9)], (5, 6): [(9, 10), (10, 11)], (6, 7): [(11, 12)], (2, 8): [(4, 13), (13, 14)],
          (8, 9): [(14, 15), (15, 16)], (9, 10): [(16, 17)], (0, 11): [(0, 18), (18, 19)],
@@ -496,7 +502,6 @@ def test_all_pooling(static):
 
 
 # plot_static = StaticData.init_from_bvh(BVH_EXAMPLE)
-# for parent in plot_static.parent_list:
+# for parent in plot_static.parents_list:
 #     plot_static.plot(parent)
 #     plt.figure()
-
