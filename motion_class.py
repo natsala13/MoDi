@@ -80,17 +80,11 @@ import matplotlib.pyplot as plt
 
 from utils.data import Edge
 
-PATH = '/Users/nathansala/tau/code/MoDi/data/edge_rot_data.npy'
 BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
 
 LEFT_FOOT_NAME = 'LeftFoot'
 RIGHT_FOOT_NAME = 'RightFoot'
-
-npy_data = np.load(PATH, allow_pickle=True)
-
-
-# animation, names, frametime = BVH.load(BVH_EXAMPLE)
 
 
 class EdgePoint(tuple):
@@ -303,7 +297,7 @@ class StaticData:
         return [edges[i:i + 2] for i in range(0, len(edges), 2)]
 
     @staticmethod
-    def flatten_dict(values: list[dict]) -> dict:
+    def flatten_dict(values):
         return {k: sublist[k] for sublist in values for k in sublist}
 
     @staticmethod
