@@ -264,7 +264,7 @@ class SkeletonAwareConv3DTraits(SkeletonAwareTraits):
         self.conv_func = F.conv3d
 
     def updown_pad(self, kernel_size=None):
-        return (self.smaller_n_joints - 1,) + super(self.__class__,self).updown_pad(kernel_size)
+        return (self.smaller_n_joints - 1,) + super().updown_pad(kernel_size)
 
     def fixed_dim_pad(self, kernel_size):
         return (self.smaller_n_joints - 1,) + super().fixed_dim_pad(kernel_size)
@@ -318,7 +318,7 @@ class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
 
     def upsample(self, blur_kernel):
         upsampling = 'bilinear'
-        return nn.Upsample(scale_factor=(1,2), mode=upsampling, align_corners=False)
+        return nn.Upsample(scale_factor=(1, 2), mode=upsampling, align_corners=False)
 
     def updown_pad(self, kernel_size=None):
         return self.fixed_dim_pad(kernel_size)
@@ -375,67 +375,43 @@ class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
         return True
 
 
-class SkeletonAwareFastConvTraits(SkeletonAwareTraits):
+class SkeletonAwareFastConvTraits(SkeletonAwareConv3DTraits):
     def __init__(self, parents, pooling_list):
         super().__init__(parents, pooling_list)
+        self.updown_stride = self.updown_stride[1:]
 
-        def conv_func(inputs, weight, padding, groups):
+        def conv_func(inputs, weight, padding=0, stride=1, groups=1, **kwargs):
+            batch = inputs.shape[0]
             out_channels = weight.shape[0]
-            height = inputs.shape[-2]
 
             weight = weight.transpose(1, 2).flatten(start_dim=0, end_dim=1)
-            # original weights are [C_out, C_in, E_out, E_in, k] and we switch to [C_out * E_out, C_in, E_in, k]
 
-            out = F.conv2d(inputs, weight, padding=padding, groups=groups)
-
-            out = out.reshape(groups, out_channels, height, -1)
+            out = F.conv2d(inputs, weight, padding=padding[1:], stride=stride, groups=groups, **kwargs)
+            out = out.reshape(batch, out_channels, -1, out.shape[-1])
 
             return out
-
         self.conv_func = conv_func
 
-        def conv_transpose_func(inputs, weight, padding, stride, groups):
-            height = weight.shape[-2]
+        def transposed_conv_func(inputs, weight, padding, stride, groups, **kwargs):
             out_channels = weight.shape[1]
 
             weight = weight.flip(2).transpose(2, 3).flatten(start_dim=1, end_dim=2)
             # original weights are [C_in, C_out, E_in, E_out, k] and we switch to [C_in, C_out * E_out^*, E_in, k]
 
-            out = F.conv_transpose2d(inputs, weight, padding=padding, stride=stride, groups=groups)
-            out = out.reshape(groups, out_channels, height, -1)
+            out = F.conv_transpose2d(inputs, weight, padding=padding[:-1], stride=stride, groups=groups, **kwargs)
+            out = out.reshape(1, groups * out_channels, -1, out.shape[-1])
 
             return out
 
-        self.transposed_conv_func = conv_transpose_func
+        self.transposed_conv_func = transposed_conv_func
 
-    def updown_pad(self, kernel_size=None):
-        return (self.smaller_n_joints - 1,) + super(self.__class__, self).updown_pad(kernel_size)[:-1]
-
-    # Return super.
-    def fixed_dim_pad(self, kernel_size):
-        return super().fixed_dim_pad(kernel_size)
-
-    def weight_internal(self, in_channel, out_channel, kernel_size):  # TODO: Rewrite
-        return torch.randn(out_channel, in_channel, self.smaller_n_joints, self.larger_n_joints, kernel_size)
-        # return torch.randn(out_channel * self.smaller_n_joints, in_channel, self.larger_n_joints, kernel_size)
-        # w.flip(2).transpose(1, 2).flatten(start_dim=0, end_dim=1)
-
-    def mask_affectors(self, mask, out_channel, joint_idx, affectors_this_joint):
-        # TODO: Need to change only after weights are changing.
-        mask[..., joint_idx, affectors_this_joint, :] = 1
-        return mask
-
-    def reshape_style(self, style):  # TODO: Need to change only after weights are changing.
-        assert (style.view(style.shape[:3] + (1,) + style.shape[3:]) == style[:, :, :, np.newaxis]).all()
-        return style[:, :, :, np.newaxis]  # add a dimension for out_j
-
-    # conv3 dimensions are [batch, out_ch, in_ch, out_j, in_j, ker_wid]
-    # demodulation should be ran over inch, in_j and ker_wid. the reason we don't run it on out_j is that
-    # we have a separate set of weights for each output joints, so it's not that we multiply the full kernel
-    # (i.e. [out_j, in_j, ker_wid]) by the data: we multiply only [1, in_j, ker_wid] by the data each time
-    def norm_axis(self, weight):  # TODO: I dont understand what do I need to change here.
-        ndim = weight.ndim
-        return [ndim-4, ndim-2, ndim-1]
+    # def updown_pad(self, kernel_size=None):
+    #     print(f'updown padding - {super().updown_pad(kernel_size)}')
+    #     return super().updown_pad(kernel_size)[1:]
+    #
+    # # Return super.
+    # def fixed_dim_pad(self, kernel_size):
+    #     return super().fixed_dim_pad(kernel_size)[1:]
 
     def reshape_input_before_transposed_conv(self, inputs, batch, width):
         return inputs
@@ -444,16 +420,7 @@ class SkeletonAwareFastConvTraits(SkeletonAwareTraits):
         return inputs
 
     def reshape_output_after_conv(self, output):  # TODO: Rewrite - I cannot know exact height and out_channels values
-        # out_channels = self.weight.shape[0]
-        # batch, channels_time_height, _, _ = output.shape
-        # height = channels_time_height / out_channels
-        #
-        # return output.reshape(batch, out_channels, height, -1)
         return output
-
-    @staticmethod
-    def kernel_dim():
-        return 3
 
     def flip_if_needed(self, weight):  # TODO: Rewrite
         return weight  # flip nessecary only in transposed conv.

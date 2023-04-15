@@ -69,6 +69,7 @@ class TrainOptions(TrainBaseOptions):
         parser.add_argument("--joints_pool", action="store_true",
                             help="manipulate joints by pool/unpool rather than conv (skeleton-aware only)")
         parser.add_argument("--conv3", action="store_true", help="use 3D convolutions (skeleton-aware only)")
+        parser.add_argument("--fast", action="store_true", help="use fast 2D convolutions (skeleton-aware only)")
         parser.add_argument("--entity", type=str, default='Edge', choices=['Joint', 'Edge'],
                             help="entity type: Joint for joint locations, or Edge for edge rotations")
         parser.add_argument("--glob_pos", action="store_true",
@@ -91,7 +92,7 @@ class TrainOptions(TrainBaseOptions):
         self.parser = parser
 
     def after_parse(self, args):
-        assert (not (args.skeleton | args.conv3 | args.joints_pool)) | args.skeleton & (args.conv3 ^ args.joints_pool)
+        assert (not (args.skeleton | args.conv3 | args.joints_pool | args.fast)) | args.skeleton & (args.conv3 ^ args.joints_pool ^ args.fast)
         return args
 
 class TestBaseOptions(BaseOptions):
@@ -243,12 +244,17 @@ def setup_env(args, get_traits=False):
         args.axis_up = 1
 
     if get_traits:
-        from utils.traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits, NonSkeletonAwareTraits
+        from utils.traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits,\
+            NonSkeletonAwareTraits, SkeletonAwareFastConvTraits
+
         if args.skeleton:
             if args.joints_pool:
                 traits_class = SkeletonAwarePoolTraits
             elif args.conv3:
                 traits_class = SkeletonAwareConv3DTraits
+            elif args.fast:
+                print(f'Using fast convolution')
+                traits_class = SkeletonAwareFastConvTraits
             else:
                 raise 'Traits cannot be selected.'
         else:
