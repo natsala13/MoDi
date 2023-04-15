@@ -90,6 +90,8 @@ class TrainOptions(TrainBaseOptions):
                             help="Number of self convolutions within each hierarchical layer. StyleGAN original is 1. ")
         parser.add_argument('--act_rec_gt_path', type=str,
                             help='path to ground truth file that was used during action recognition train. Not needed unless is different from the one used by the synthesis network')
+        parser.add_argument('--bvh', type=str, default='tests/motion0.bvh',
+                            help='Path to bvh containing motion topology')
         self.parser = parser
 
     def after_parse(self, args):

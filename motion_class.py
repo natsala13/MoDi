@@ -107,7 +107,7 @@ class StaticData:
         self.offsets = offsets
         self.names = names
 
-        self.parent_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)  # TODO: Make cached properties.
+        self.parents_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)  # TODO: Make cached properties.
         self.skeletal_pooling_dist_1 = [{edge[1]: [e[1] for e in pooling[edge]] for edge in pooling}
                                         for pooling in self.skeletal_pooling_dist_1_edges]
 
@@ -158,7 +158,7 @@ class StaticData:
 
     @property
     def n_edges(self):
-        return [len(parents) for parents in self.parent_list]
+        return [len(parents) for parents in self.parents_list]
 
     def save_to_bvh(self, out_filepath: str) -> None:
         raise NotImplementedError
@@ -185,7 +185,7 @@ class StaticData:
                 n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
                 pooling_hierarchical_stage[n_small_stage] = [n_large_stage]
 
-        for parents in self.parent_list:
+        for parents in self.parents_list:
             parents.append(-2)
 
     def is_foot_contact_enabled(self, level=-1):
@@ -215,7 +215,7 @@ class StaticData:
 
         all_foot_indeces = self._foot_indexes()
 
-        for parent, foot_indeces in zip(self.parent_list, all_foot_indeces):
+        for parent, foot_indeces in zip(self.parents_list, all_foot_indeces):
             for foot_index in foot_indeces:
                 parent.append((-3, foot_index))
 
@@ -434,17 +434,17 @@ def static():
 
 @pytest.fixture(autouse=True)
 def degree(static):
-    return static._topology_degree(static.parent_list[0])
+    return static._topology_degree(static.parents_list[0])
 
 
 @pytest.fixture(autouse=True)
 def pooling(static, degree):
-    return static._calculate_pooling_for_level(static.parent_list[0], degree)
+    return static._calculate_pooling_for_level(static.parents_list[0], degree)
 
 
 def test_parents(static):
-    assert static.parent_list[0] == [-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4,
-                                     13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24]
+    assert static.parents_list[0] == [-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4,
+                                      13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24]
 
 
 def test_degree(degree):
@@ -452,7 +452,7 @@ def test_degree(degree):
 
 
 def test_sequences(static, degree):
-    seq = static._find_seq(0, degree, static.parent_list[0])
+    seq = static._find_seq(0, degree, static.parents_list[0])
     assert seq == [[0, 1, 2, 3, 4], [4, 5, 6, 7], [4, 8, 9, 10, 11, 12], [4, 13, 14, 15, 16, 17], [0, 18, 19, 20, 21],
                    [0, 22, 23, 24, 25]]
 
@@ -478,9 +478,9 @@ def test_pooling_normalised(pooling):
 
 
 def test_all_parents(static):
-    assert static.parent_list[:-2] == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
-                           [-1, 0, 1, 2, 3, 2, 5, 6, 2, 8, 9, 0, 11, 0, 13], [-1, 0, 1, 1, 3, 1, 5, 0, 0],
-                           [-1, 0, 1, 1, 1, 0, 0]]
+    assert static.parents_list[:-2] == [[-1, 0, 1, 2, 3, 4, 5, 6, 4, 8, 9, 10, 11, 4, 13, 14, 15, 16, 0, 18, 19, 20, 0, 22, 23, 24],
+                                        [-1, 0, 1, 2, 3, 2, 5, 6, 2, 8, 9, 0, 11, 0, 13], [-1, 0, 1, 1, 3, 1, 5, 0, 0],
+                                        [-1, 0, 1, 1, 1, 0, 0]]
 
 
 def test_all_pooling(static):

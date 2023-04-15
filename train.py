@@ -24,6 +24,8 @@ from models.gan import Generator, Discriminator
 from utils.foot import get_foot_contact, get_foot_velo
 from utils.data import Joint, Edge # to be used in 'eval'
 from utils.pre_run import TrainOptions, setup_env
+from motion_class import StaticData
+
 
 from utils.distributed import (
     get_rank,
@@ -178,7 +180,7 @@ def set_grad_none(model, targets):
             p.grad = None
 
 
-def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, entity,
+def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static: StaticData,
           animations_output_folder, images_output_folder, mean_joints=None, std_joints=None, gt_bone_lengths=None, edge_rot_dict_general=None):
     loader = sample_data(loader)
 
@@ -317,7 +319,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         loss_dict["path_length"] = path_lengths.mean()
 
         if i >= 2000 and i % 2000 == 0 and args.action_recog_model is not None:
-            fid, kid, g_diversity = calc_evaluation_metrics(args, device, g_ema, entity, std_joints, mean_joints)
+            fid, kid, g_diversity = calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints)
             loss_dict['evaluation_metrics_fid'] = fid
             loss_dict['evaluation_metrics_kid'] = kid
             loss_dict['evaluation_metrics_g_diversity'] = g_diversity
@@ -376,11 +378,11 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 fake_motion = fake_img.transpose(1,2).detach().cpu().numpy()
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
-                motion2bvh(fake_motion[0], motion_path, parents=entity.parents_list, entity=entity.str(), edge_rot_dict_general=edge_rot_dict_general)
+                motion2bvh(fake_motion[0], motion_path, parents=static.parents_list, entity=static.str(), edge_rot_dict_general=edge_rot_dict_general)
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i, local_path=motion_path)
 
-                fig = motion2fig(fake_motion, H=512, W=512, entity=entity.str(),
+                fig = motion2fig(fake_motion, H=512, W=512, entity=static.str(),
                                  edge_rot_dict_general=edge_rot_dict_general)
                 fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
                 fig.savefig(fig_path, dpi=300, bbox_inches='tight')
@@ -399,12 +401,12 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
     print(f'\nAverage time for {report_every} iterations: {mean_times} seconds.')
 
 
-def calc_evaluation_metrics(args, device, g_ema, entity, std_joints, mean_joints):
+def calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints):
     # create stgcn model
-    stgcn_model = evaluate.initialize_model(device, modelpath= args.action_recog_model, dataset = args.dataset)
+    stgcn_model = evaluate.initialize_model(device, modelpath=args.action_recog_model, dataset=args.dataset)
 
     # generate motions
-    generated_motions = evaluate.generate(args, g_ema, device, mean_joints, std_joints, entity=entity)
+    generated_motions = evaluate.generate(args, g_ema, device, mean_joints, std_joints, static=static)
     generated_motions = generated_motions[:, :15]
     generated_motions -= generated_motions[:, 8:9, :, :]
     iterator_generated = data.DataLoader(generated_motions, batch_size=500, shuffle=False, num_workers=8)
@@ -477,15 +479,16 @@ def main(args_not_parsed):
         synchronize()
 
     args.start_iter = 0
-    entity = eval(args.entity)
+    # entity = eval(args.entity)
+    static = StaticData.init_from_bvh(args.bvh)
 
     generator = Generator(
-        args.latent, args.n_mlp, traits_class=traits_class, entity=entity, n_inplace_conv=args.n_inplace_conv
+        args.latent, args.n_mlp, traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
     ).to(device)
-    discriminator = Discriminator(traits_class=traits_class, entity=entity, n_inplace_conv=args.n_inplace_conv
+    discriminator = Discriminator(traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
     ).to(device)
     g_ema = Generator(
-        args.latent, args.n_mlp, traits_class=traits_class, entity=entity, n_inplace_conv=args.n_inplace_conv
+        args.latent, args.n_mlp, traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
     ).to(device)
     g_ema.eval()
     accumulate(g_ema, generator, 0)
@@ -529,7 +532,7 @@ def main(args_not_parsed):
     gt_bone_lengths = calc_bone_lengths(motion_data) if args.entity == 'Joint' else None
 
     motion_path = osp.join(animations_output_folder, 'real_motion.bvh')
-    motion2bvh(motion_data[0], motion_path, parents=entity.parents_list, entity=args.entity,
+    motion2bvh(motion_data[0], motion_path, parents=static.parents_list, entity=args.entity,
                edge_rot_dict_general=edge_rot_dict_general)
     if args.clearml:
         logger.report_media(title='Animation', series='Ground Truth Motion', iteration=0, local_path=motion_path)
@@ -551,7 +554,7 @@ def main(args_not_parsed):
         drop_last=True,
     )
 
-    train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, entity,
+    train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static,
           animations_output_folder, images_output_folder, mean_joints, std_joints, gt_bone_lengths, edge_rot_dict_general)
 
 

@@ -264,7 +264,7 @@ def main(args_not_parsed):
     args = parser.parse_args(args_not_parsed)
     device = args.device
     g_ema, discriminator, checkpoint, static, mean_joints, std_joints = load_all_form_checkpoint(args.ckpt, args)
-    out_path = generate(args, g_ema, device, mean_joints, std_joints, entity=entity)
+    out_path = generate(args, g_ema, device, mean_joints, std_joints, static=static)
     return out_path
 
 

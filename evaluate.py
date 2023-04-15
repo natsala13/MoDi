@@ -23,8 +23,8 @@ from utils.pre_run import EvaluateOptions, load_all_form_checkpoint
 
 TEST = False
 
-def generate(args, g_ema, device, mean_joints, std_joints, entity):
 
+def generate(args, g_ema, device, mean_joints, std_joints, static):  # TODO: Not using static data excpet for knowing str. - Remove
     # arguments required by generation
     args.sample_seeds = None
     args.no_idle = False
@@ -57,7 +57,7 @@ def generate(args, g_ema, device, mean_joints, std_joints, entity):
     generated_motion_np, _ = get_gen_mot_np(args, generated_motion, mean_joints, std_joints)
     generated_motions = np.concatenate(generated_motion_np, axis=0)
 
-    if entity.str() == 'Joint':
+    if static.str() == 'Joint':
         return generated_motions
 
     _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))
