@@ -289,7 +289,12 @@ class StaticData:
     @staticmethod
     def _pooling_for_edges_list(edges: [EdgePoint]) -> list:
         """Return a list sublist of edges of length 2."""
-        return [edges[i:i + 2] for i in range(0, len(edges), 2)]
+        pooling_groups = [edges[i:i + 2] for i in range(0, len(edges), 2)]
+        if len(pooling_groups) > 1 and len(pooling_groups[-1]) == 1:  # If we have an odd numbers of edges pull 3 of them in once.
+            pooling_groups[-2] += pooling_groups[-1]
+            pooling_groups = pooling_groups[:-1]
+
+        return pooling_groups
 
     @staticmethod
     def flatten_dict(values: list[dict]) -> dict:
