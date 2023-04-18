@@ -122,8 +122,7 @@ class StaticData:
         if enable_foot_contact:
             self.enable_foot_contact()
         if rotation_representation == 'repr6d':
-                self.enable_repr6d()
-
+            self.enable_repr6d()
 
     @staticmethod
     def str():  # TODO: Understand how to remove that.
