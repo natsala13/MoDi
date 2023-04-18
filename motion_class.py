@@ -185,10 +185,10 @@ class StaticData:
         """Run overs pooling list and calculate foot location at each level"""
         foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
         all_foot_indexes = [foot_indexes]
-        for pooling in self.skeletal_pooling_dist_1.reverse():
+        for pooling in self.skeletal_pooling_dist_1[::-1]:
             all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
 
-        return all_foot_indexes
+        return all_foot_indexes[::-1]
 
     def enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
@@ -342,10 +342,10 @@ class StaticData:
     @staticmethod
     def _normalise_joints(pooling: {EdgePoint: [EdgePoint]}) -> {EdgePoint: [EdgePoint]}:
         max_joint = 0
-        joint_to_new_joint: {int: int} = {0: 0}
+        joint_to_new_joint: {int: int} = {-1: -1, 0: 0}
         new_edges = {}
 
-        for edge in pooling:
+        for edge in sorted(pooling, key=lambda x: x[1]):
             if edge[1] > max_joint:
                 max_joint += 1
                 joint_to_new_joint[edge[1]] = max_joint
@@ -357,7 +357,7 @@ class StaticData:
 
     @staticmethod
     def _edges_to_parents(edges: [EdgePoint]):
-        return [-1] + [edge[0] for edge in edges]
+        return [edge[0] for edge in edges]
 
     def calculate_all_pooling_levels(self, parents0):
         # pooling = self._calculate_pooling_for_level(self.parents)
@@ -366,9 +366,8 @@ class StaticData:
         degree = StaticData._topology_degree(all_parents[-1])
 
         while any(d == 1 for d in degree):
-        # for _ in range(3):
-        #     pooling = self._calculate_pooling_for_level(all_parents[-1], degree)
             pooling = self._calculate_degree1_pooling(all_parents[-1], degree)
+            pooling[(-1, 0)] = [(-1, 0)]  # Add root rotation pooling.
 
             normalised_pooling = self._normalise_joints(pooling)
             normalised_parents = self._edges_to_parents(normalised_pooling.keys())
@@ -379,9 +378,9 @@ class StaticData:
             degree = StaticData._topology_degree(all_parents[-1])
 
         # TODO: make pooling after primal skeleton automatic.
-        all_parents += [[-1, 0, 1], [-1, 0]]
-        all_poolings += [{(0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
-                         {(0, 1): [(0, 1), (1, 2)]}]
+        all_parents += [[-1, 0, 1], [-1]]
+        all_poolings += [{(-1, 0): [(-1, 0)], (0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
+                         {(-1, 0): [(-1, 0), (0, 1), (1, 2)]}]
 
         return all_parents[::-1], all_poolings[::-1]
 
