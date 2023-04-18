@@ -475,9 +475,9 @@ class Generator(nn.Module):
 
         for i in range(1, len(self.n_channels)):
             out_channel = self.n_channels[i]
-            cur_parents = entity.parents_list[i]
+            cur_parents = static.parents_list[i]
 
-            skeleton_traits_upsample = traits_class(cur_parents, entity.skeletal_pooling_dist_1[i - 1])
+            skeleton_traits_upsample = traits_class(cur_parents, static.skeletal_pooling_dist_1[i - 1])
             # upsample
             self.convs.append(
                 StyledConv(
@@ -490,7 +490,6 @@ class Generator(nn.Module):
                     skeleton_traits=skeleton_traits_upsample,
                 )
             )
-
             skeleton_traits_keep_dims = traits_class(cur_parents, keep_skeletal_dims(n_joints[i]))
             # keep dims
             for _ in range(n_inplace_conv):
@@ -502,7 +501,7 @@ class Generator(nn.Module):
                 )
 
             self.to_xyzs.append(ToXYZ(out_channel, style_dim, skeleton_traits=skeleton_traits_keep_dims,
-                                      skip_pooling_list=entity.skeletal_pooling_dist_1[i - 1], entity=entity))
+                                      skip_pooling_list=static.skeletal_pooling_dist_1[i - 1], entity=static))
 
             in_channel = out_channel
 

@@ -479,8 +479,10 @@ def main(args_not_parsed):
         synchronize()
 
     args.start_iter = 0
-    # entity = eval(args.entity)
-    static = StaticData.init_from_bvh(args.bvh)
+
+    static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+    if args.foot:  # TODO: Why is that?
+        args.axis_up = 1
 
     generator = Generator(
         args.latent, args.n_mlp, traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv
