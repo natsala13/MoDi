@@ -77,6 +77,8 @@ from Motion import BVH
 import networkx as nx
 import matplotlib.pyplot as plt
 
+from Motion.AnimationStructure import children_list
+
 
 BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
@@ -95,7 +97,7 @@ class EdgePoint(tuple):
 
 class StaticData:
     def __init__(self, parents: [int], offsets: np.array, names: [str], n_channels=4,
-                 enable_global_position=False, enable_foot_contact=False):
+                 enable_global_position=False, enable_foot_contact=False, rotation_representation='quaternion'):
         self.offsets = offsets
         self.names = names
 
@@ -111,17 +113,31 @@ class StaticData:
 
         # Configurations
         self.__n_channels = n_channels
-        self.enable_global_position_flag = enable_global_position
-        self.enable_foot_contact_flag = enable_foot_contact
+
+        self.enable_global_position_flag = False
+        self.enable_foot_contact_flag = False
+
+        if enable_global_position:
+            self.enable_global_position()
+        if enable_foot_contact:
+            self.enable_foot_contact()
+        if rotation_representation == 'repr6d':
+                self.enable_repr6d()
+
 
     @staticmethod
     def str():  # TODO: Understand how to remove that.
         return 'Edge'
 
     @classmethod
-    def init_from_bvh(cls, bvf_filepath: str):
+    def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False, enable_foot_contact=False, rotation_representation='quaternion'):
         animation, names, frametime = BVH.load(bvf_filepath)
-        return cls(animation.parents, animation.offsets, names)
+        return cls(animation.parents, animation.offsets, names,
+                   enable_global_position=enable_global_position,
+                   enable_foot_contact=enable_foot_contact,
+                   rotation_representation=rotation_representation)
+
+
 
     # @property
     # def offsets(self) -> np.ndarray:  # TODO: Should I add also the global position?
@@ -188,10 +204,10 @@ class StaticData:
         """Run overs pooling list and calculate foot location at each level"""
         foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
         all_foot_indexes = [foot_indexes]
-        for pooling in self.skeletal_pooling_dist_1.reverse():
+        for pooling in self.skeletal_pooling_dist_1[::-1]:
             all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
 
-        return all_foot_indexes
+        return all_foot_indexes[::-1]
 
     def enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
@@ -387,6 +403,52 @@ class StaticData:
                          {(0, 1): [(0, 1), (1, 2)]}]
 
         return all_parents[::-1], all_poolings[::-1]
+
+    def neighbors_by_distance(self, parents: [int], dist=1):
+        assert dist in [0, 1], 'distance larger than 1 is not supported yet'
+
+        neighbors = {joint_idx: [joint_idx] for joint_idx in range(len(parents))}
+        if dist == 0:  # code should be general to any distance. for now dist==1 is the largest supported
+            return neighbors
+
+        # handle non virtual joints
+        children = children_list(parents)
+
+        # for joint_idx in range(n_entities):
+        for dst, src in enumerate(parents):
+            # parent_idx = parents[joint_idx]
+            if src not in [-1, -2] and not isinstance(src, tuple):
+                # -1 is the parent of root. -2 is the parent of global location, tuple for foot_contact
+                neighbors[dst].append(src)  # add entity's parent
+            neighbors[dst].extend(children[dst])  # append all entity's children
+
+        # handle global pos virtual joint
+        if -2 in parents:  # Global position is enabled..
+            root_idx = parents.index(-1)
+            glob_pos_idx = parents.index(-2)
+
+            # global position should have same neighbors of root and should become his neighbors' neighbor
+            neighbors[glob_pos_idx].extend(neighbors[root_idx])
+            for root_neighbor in neighbors[root_idx]:
+                # changing the neighbors of root during iteration puts the new neighbor in the iteration
+                if root_neighbor != root_idx:
+                    neighbors[root_neighbor].append(glob_pos_idx)
+            neighbors[root_idx].append(glob_pos_idx)  # finally change root itself
+
+        # handle foot contact label virtual joint
+        foot_and_contact_label = [(i, parents[i][1]) for i in range(len(parents)) if
+                                  isinstance(parents[i], tuple) and parents[i][0] == -3]
+
+        # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
+        for foot_idx, contact_label_idx in foot_and_contact_label:
+            neighbors[contact_label_idx].extend(neighbors[foot_idx])
+            for foot_neighbor in neighbors[foot_idx]:
+                # changing the neighbors of root during iteration puts the new neighbor in the iteration
+                if foot_neighbor != foot_idx:
+                    neighbors[foot_neighbor].append(contact_label_idx)
+            neighbors[foot_idx].append(contact_label_idx)  # finally change foot itself
+
+        return neighbors
 
     def plot(self, parents):
         graph = nx.Graph()
