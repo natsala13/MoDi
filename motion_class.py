@@ -35,11 +35,15 @@
         - reading const num channles.
         - reading params as num frames and num joints.
     -> Traits uses entity to call n_edges.
+* edge_rot_dict_general usage
+    -> foot contact loss -> get foot contact / get foor velo (foot.py)
+    -> motion2bvh
+    -> motion2fig
 
 *** QUESTIONS
-* why arnt edge and joints (parents list) consistent? do we need both of them? They are supposed to be consistent.
 -> for some reason parent list is edges indexes in edge list.
-* Whats the use of enable foot contact? it adds edges to parent list.
+* Why do we save real_motion in the start of the run?
+* What to do with mean and std?
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
@@ -54,14 +58,13 @@
 [v] add root position.
 [v] add foot location.
 [X] pooling for after rest position. - MAKE AUTOMATIC
-[ ] reverse lists
+[v] reverse lists
 [ ] return offsets.
 [ ] Create dynamic class.
-[ ] Reverse parent list order.
-[ ] Neighbors list
+[x] Neighbors list
 [ ] Remove root position and foot contact.
 
-[ ] make generation working using motion class.
+[ ] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
 [ ] save bvh correctly?
 [ ] make skeleton dist1 and dist0 pooling the same - its just mean/max pooling vs spatial pooling from same list.
@@ -128,15 +131,18 @@ class StaticData:
     def str():  # TODO: Understand how to remove that.
         return 'Edge'
 
+    @property
+    def parents(self):
+        return self.parents_list[-1][:len(self.names)]
+
     @classmethod
-    def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False, enable_foot_contact=False, rotation_representation='quaternion'):
+    def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False,
+                      enable_foot_contact=False, rotation_representation='quaternion'):
         animation, names, frametime = BVH.load(bvf_filepath)
         return cls(animation.parents, animation.offsets, names,
                    enable_global_position=enable_global_position,
                    enable_foot_contact=enable_foot_contact,
                    rotation_representation=rotation_representation)
-
-
 
     # @property
     # def offsets(self) -> np.ndarray:  # TODO: Should I add also the global position?
@@ -199,7 +205,7 @@ class StaticData:
         # return any([isinstance(parent, tuple) and parent[0] == -3 for parent in cls.parents_list[level]])
         return self.enable_foot_contact_flag
 
-    def _foot_indexes(self):
+    def foot_indexes(self):
         """Run overs pooling list and calculate foot location at each level"""
         foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
         all_foot_indexes = [foot_indexes]
@@ -220,7 +226,7 @@ class StaticData:
 
         self.enable_foot_contact_flag = True
 
-        all_foot_indeces = self._foot_indexes()
+        all_foot_indeces = self.foot_indexes()
 
         for parent, foot_indeces in zip(self.parents_list, all_foot_indeces):
             for foot_index in foot_indeces:
@@ -456,16 +462,17 @@ class StaticData:
 
 
 class DynamicData:
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self, motion: torch.tensor):
+        self.motion = motion
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str):
-        raise NotImplementedError
+        animation, _, _ = BVH.load(bvf_filepath)
+        return cls(animation.rotations)
 
-    @property
-    def motion(self) -> torch.tensor:
-        raise NotImplementedError
+    # @property
+    # def motion(self) -> torch.tensor:
+    #     raise NotImplementedError
 
     @property
     def edge_rotations(self) -> torch.tensor:

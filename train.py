@@ -24,7 +24,7 @@ from models.gan import Generator, Discriminator
 from utils.foot import get_foot_contact, get_foot_velo
 from utils.data import Joint, Edge # to be used in 'eval'
 from utils.pre_run import TrainOptions, setup_env
-from motion_class import StaticData
+from motion_class import StaticData, DynamicData
 
 
 from utils.distributed import (
@@ -118,10 +118,12 @@ def g_path_regularize(fake_img, latents, mean_path_length, decay=0.01):
     return path_penalty, path_mean.detach(), path_lengths
 
 
-def g_foot_contact_loss(motion, glob_pos, axis_up, edge_rot_dict_general):
+def g_foot_contact_loss(motion, static: StaticData, edge_rot_dict_general, glob_pos, use_velocity, axis_up):
     # motion is of shape samples x features x joints x frames
     label_idx = motion.shape[2] - len(foot_names)
-    skeletal_foot_contact = get_foot_contact(motion[:, :, :label_idx], glob_pos, axis_up, edge_rot_dict_general, foot_names)
+    skeletal_foot_contact = get_foot_contact(motion[:, :, :label_idx], static,
+                                             edge_rot_dict_general, glob_pos, use_velocity, axis_up)
+
     predicted_foot_contact = motion[:, 0, label_idx:]
     return F.mse_loss(skeletal_foot_contact, predicted_foot_contact)
     # return F.binary_cross_entropy_with_logits((predicted_foot_contact-.5)*12, skeletal_foot_contact)
@@ -131,10 +133,12 @@ def sigmoid_for_contact(predicted_foot_contact):
     return torch.sigmoid((predicted_foot_contact - 0.5) * 2 * 6)
 
 
-def g_foot_contact_loss_v2(motion, glob_pos, axis_up, edge_rot_dict_general):
+def g_foot_contact_loss_v2(motion, static: StaticData, normalisation_data, global_position, use_velocity):
     # motion is of shape samples x features x joints x frames
     label_idx = motion.shape[2] - len(foot_names)
-    velo = get_foot_velo(motion[:, :, :label_idx], glob_pos, axis_up, edge_rot_dict_general)
+
+    velo = get_foot_velo(motion[:, :, :label_idx], static, normalisation_data, global_position, use_velocity)
+
     predicted_foot_contact = motion[:, 0, label_idx:]
     predicted_foot_contact = sigmoid_for_contact(predicted_foot_contact)
     return (predicted_foot_contact[..., 1:] * velo).mean()
@@ -181,7 +185,8 @@ def set_grad_none(model, targets):
 
 
 def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static: StaticData,
-          animations_output_folder, images_output_folder, mean_joints=None, std_joints=None, gt_bone_lengths=None, edge_rot_dict_general=None):
+          animations_output_folder, images_output_folder, mean_joints=None, std_joints=None, gt_bone_lengths=None,
+          edge_rot_dict_general=None):
     loader = sample_data(loader)
 
     pbar = range(args.iter)
@@ -276,12 +281,17 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
 
         loss_dict["g"] = g_loss
 
+        normalisation_data = {'std': torch.tensor(edge_rot_dict_general['std']).cuda(),
+                              'mean': torch.tensor(edge_rot_dict_general['mean']).cuda(),
+                              'parents_with_root': edge_rot_dict_general['parents_with_root']}
+
         # foot contact loss
         if args.foot:
             if args.v2_contact_loss:
-                foot_contact_loss = g_foot_contact_loss_v2(fake_img, args.glob_pos, args.axis_up, edge_rot_dict_general)
+                use_velocity = 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
+                foot_contact_loss = g_foot_contact_loss_v2(fake_img, static, normalisation_data, args.glob_pos, use_velocity)
             else:
-                foot_contact_loss = g_foot_contact_loss(fake_img, args.glob_pos, args.axis_up, edge_rot_dict_general)
+                foot_contact_loss = g_foot_contact_loss(fake_img, static, normalisation_data, args.glob_pos, args.axis_up)
         loss_dict["foot_contact"] = foot_contact_loss
 
         loss_dict["encourage_contact"] = g_encourage_contact(fake_img)
@@ -433,6 +443,7 @@ def calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints
 
     return fid, kid[0], g_diversity
 
+
 def main(args_not_parsed):
     parser = TrainOptions()
     args = parser.parse_args(args_not_parsed)
@@ -480,7 +491,19 @@ def main(args_not_parsed):
 
     args.start_iter = 0
 
-    static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+    motion_data_raw = np.load(args.path, allow_pickle=True)
+
+    # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+    static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
+                        offsets=offsets,
+                        names=motion_data_raw[0]['names_with_root'],
+                        n_channels=4,
+                        enable_global_position=args.glob_pos,
+                        enable_foot_contact=args.foot,
+                        rotation_representation=args.rotation_repr)
+    dynamic = DynamicData.init_from_bvh(args.bvh)
+
     if args.foot:  # TODO: Why is that?
         args.axis_up = 1
 
@@ -528,24 +551,27 @@ def main(args_not_parsed):
         g_optim.load_state_dict(ckpt["g_optim"])
         d_optim.load_state_dict(ckpt["d_optim"])
 
-    motion_data_raw = np.load(args.path, allow_pickle=True)
     motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw)
 
-    gt_bone_lengths = calc_bone_lengths(motion_data) if args.entity == 'Joint' else None
+    gt_bone_lengths = None  # calc_bone_lengths(motion_data) if args.entity == 'Joint' else None
 
-    motion_path = osp.join(animations_output_folder, 'real_motion.bvh')
-    motion2bvh(motion_data[0], motion_path, parents=static.parents_list, entity=args.entity,
-               edge_rot_dict_general=edge_rot_dict_general)
-    if args.clearml:
-        logger.report_media(title='Animation', series='Ground Truth Motion', iteration=0, local_path=motion_path)
 
-    fig = motion2fig(motion_data, H=512, W=512, entity=args.entity,
-                     edge_rot_dict_general=edge_rot_dict_general)
-    fig_name = osp.join(images_output_folder, 'real_motion.png')
-    fig.savefig(fig_name, dpi=300, bbox_inches='tight')
-    plt.close() # close figure
-    if args.clearml:
-        logger.report_media(title='Image', series='Ground Truth Motion', iteration=0, local_path=fig_name)
+    # # Just save some real motion for start - Why?
+    # motion_path = osp.join(animations_output_folder, 'real_motion.bvh')
+    # motion2bvh(motion_data[0], motion_path, static=static, parents=static.parents_list, entity=args.entity,
+    #            edge_rot_dict_general=edge_rot_dict_general)
+    # if args.clearml:
+    #     logger.report_media(title='Animation', series='Ground Truth Motion', iteration=0, local_path=motion_path)
+    #
+    # fig = motion2fig(motion_data, H=512, W=512, entity=args.entity,
+    #                  edge_rot_dict_general=edge_rot_dict_general)
+    # fig_name = osp.join(images_output_folder, 'real_motion.png')
+    # fig.savefig(fig_name, dpi=300, bbox_inches='tight')
+    # plt.close() # close figure
+    # ###################################################
+    #
+    # if args.clearml:
+    #     logger.report_media(title='Image', series='Ground Truth Motion', iteration=0, local_path=fig_name)
 
     motions_data_torch = torch.from_numpy(motion_data)
     dataset = TensorDataset(motions_data_torch)

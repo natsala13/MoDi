@@ -10,7 +10,7 @@ from Motion.Quaternions import Quaternions
 from Motion.Animation import Animation
 
 import torch # used for foot contact
-from utils.foot import get_foot_contact
+from utils.foot import get_foot_contact_original
 
 
 foot_names = ['LeftFoot', 'RightFoot']
@@ -294,50 +294,54 @@ def calc_bone_lengths(motion_data, parents=None, names=None):
     return bone_lengths
 
 
-def neighbors_by_distance(parents, dist=1):
+def neighbors_by_distance(parents: [int], dist=1):
     assert dist in [0,1], 'distance larger than 1 is not supported yet'
 
     neighbors = {joint_idx: [joint_idx] for joint_idx in range(len(parents))}
 
-    if dist == 1:  # code should be general to any distance. for now dist==1 is the largest supported
+    if dist == 0:  # code should be general to any distance. for now dist==1 is the largest supported
+        return neighbors
 
-        # handle non virtual joints
-        n_entities = len(parents)
-        children = children_list(parents)
-        for joint_idx in range(n_entities):
-            parent_idx = parents[joint_idx]
-            if parent_idx not in [-1,-2] and not isinstance(parent_idx, tuple):  # -1 is the parent of root. -2 is the parent of global location, tuple for foot_contact
-                neighbors[joint_idx].append(parent_idx)  # add entity's parent
-            neighbors[joint_idx].extend(children[joint_idx])  # append all entity's children
 
-        # handle global pos virtual joint
-        glob_pos_exists = Edge.is_global_position_enabled()
-        if glob_pos_exists:
-            root_idx = parents.index(-1)
-            glob_pos_idx = parents.index(-2)
+    # handle non virtual joints
+    n_entities = len(parents)
+    children = children_list(parents)
+    for joint_idx in range(n_entities):
+        parent_idx = parents[joint_idx]
+        if parent_idx not in [-1,-2] and not isinstance(parent_idx, tuple):  # -1 is the parent of root. -2 is the parent of global location, tuple for foot_contact
+            neighbors[joint_idx].append(parent_idx)  # add entity's parent
+        neighbors[joint_idx].extend(children[joint_idx])  # append all entity's children
 
-            # global position should have same neighbors of root and should become his neighbors' neighbor
-            neighbors[glob_pos_idx].extend(neighbors[root_idx])
-            for root_neighbor in neighbors[root_idx]:
-                # changing the neighbors of root during iteration puts the new neighbor in the iteration
-                if root_neighbor != root_idx:
-                    neighbors[root_neighbor].append(glob_pos_idx)
-            neighbors[root_idx].append(glob_pos_idx)  # finally change root itself
+    # handle global pos virtual joint
+    if -2 in parents:  # Global position is enabled...
+        # print(f'parents - {parents}')
+        root_idx = parents.index(-1)
+        glob_pos_idx = parents.index(-2)
 
-        # handle foot contact label virtual joint
-        foot_contact_exists = Edge.is_foot_contact_enabled()
-        if foot_contact_exists:
-            foot_and_contact_label = [(i, parents[i][1]) for i in range(len(parents)) if
-                                      isinstance(parents[i],tuple) and parents[i][0]==-3]
+        # global position should have same neighbors of root and should become his neighbors' neighbor
+        neighbors[glob_pos_idx].extend(neighbors[root_idx])
+        for root_neighbor in neighbors[root_idx]:
+            # changing the neighbors of root during iteration puts the new neighbor in the iteration
+            if root_neighbor != root_idx:
+                neighbors[root_neighbor].append(glob_pos_idx)
+        neighbors[root_idx].append(glob_pos_idx)  # finally change root itself
 
-            # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
-            for foot_idx, contact_label_idx in foot_and_contact_label:
-                neighbors[contact_label_idx].extend(neighbors[foot_idx])
-                for foot_neighbor in neighbors[foot_idx]:
-                    # changing the neighbors of root during iteration puts the new neighbor in the iteration
-                    if foot_neighbor != foot_idx:
-                        neighbors[foot_neighbor].append(contact_label_idx)
-                neighbors[foot_idx].append(contact_label_idx)  # finally change foot itself
+    # handle foot contact label virtual joint
+    foot_and_contact_label = [(i, parents[i][1]) for i in range(len(parents)) if
+                              isinstance(parents[i],tuple) and parents[i][0]==-3]
+
+    # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
+    for foot_idx, contact_label_idx in foot_and_contact_label:
+        try:
+            neighbors[contact_label_idx].extend(neighbors[foot_idx])
+        except BaseException:
+            import ipdb;ipdb.set_trace()
+
+        for foot_neighbor in neighbors[foot_idx]:
+            # changing the neighbors of root during iteration puts the new neighbor in the iteration
+            if foot_neighbor != foot_idx:
+                neighbors[foot_neighbor].append(contact_label_idx)
+        neighbors[foot_idx].append(contact_label_idx)  # finally change foot itself
 
     return neighbors
 
@@ -610,13 +614,16 @@ def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dic
     n_frames_max = motion_data[-1].shape[-1]
     n_feet = len(Edge.feet_list_edges[-1])  # use this in case there is no pyramid
 
+    # So far nothing really happend, some params were extracted, first block didnt run.
+
     # handle all levels
     for hierarchy_level in range(len(motion_data) - 1, -1, -1):  # iterate in reverse order so each level can use its upper one
         motion = motion_data[hierarchy_level]
         motion_tr = motion[0].transpose(2, 0, 1)  # edges x features x frames ==> frames x edges x features
         n_frames = motion_tr.shape[0]
-        n_edges = motion_tr.shape[1]
-        frame_mults[hierarchy_level] = int(n_frames_max / n_frames)
+        n_edges = motion_tr.shape[1]  # TODO: Take those info from static data.
+
+        frame_mults[hierarchy_level] = int(n_frames_max / n_frames)  # Whats that?
         if type in ['sample', 'interp-mix-pyramid'] and n_edges != Edge.n_edges[-1]:
                 # and hierarchy_level != len(motion_data) - 1:  # uppermost hierarchy level
             n_feet = len(Edge.feet_list_edges[hierarchy_level]) # override the n_feet from outside the loop
@@ -764,7 +771,7 @@ def motion_from_raw(args, motion_data_raw):
 
 
 def append_foot_contact(motion_data, glob_pos, axis_up, edge_rot_dict_general):
-    foot_contact = get_foot_contact(motion_data, glob_pos, axis_up, edge_rot_dict_general, foot_names=foot_names)
+    foot_contact = get_foot_contact_original(motion_data, glob_pos, axis_up, edge_rot_dict_general, foot_names=foot_names)
 
     #  pad foot_contact to the size of motion_data features (quaternions or other)
     n_foot = len(foot_names)

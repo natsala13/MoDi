@@ -226,6 +226,7 @@ class SkeletonAwareTraits(SkeletonTraits):
         # print('***************\nNO MASK\n**************')
         # return mask
         upsample = (self.larger_n_joints!=self.smaller_n_joints)
+        neighbor_dist = -1
         if upsample:
             affectors_all_joint = self.pooling_list
         else:

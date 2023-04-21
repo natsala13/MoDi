@@ -501,7 +501,7 @@ class Generator(nn.Module):
                 )
 
             self.to_xyzs.append(ToXYZ(out_channel, style_dim, skeleton_traits=skeleton_traits_keep_dims,
-                                      skip_pooling_list=static.skeletal_pooling_dist_1[i - 1], entity=static))
+                                      skip_pooling_list=static.skeletal_pooling_dist_1[i - 1], static=static))
 
             in_channel = out_channel
 
