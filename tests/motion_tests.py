@@ -1,10 +1,12 @@
+import torch
 import pytest
+import numpy as np
 import matplotlib.pyplot as plt
 
 from motion_class import StaticData
 
 PATH = '/Users/nathansala/tau/code/MoDi/data/edge_rot_data.npy'
-BVH_EXAMPLE = 'motion0.bvh'
+BVH_EXAMPLE = 'data/motion0.bvh'
 BVH_GENERATED = 'generated_1304.bvh'
 BVH_SALUTE = 'Salute.bvh'
 
@@ -12,22 +14,22 @@ BVH_SALUTE = 'Salute.bvh'
 # npy_data = np.load(PATH, allow_pickle=True)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope='session')
 def static():
     return StaticData.init_from_bvh(BVH_EXAMPLE)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope='session')
 def parents(static):
     return static.parents_list[-1]
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope='session')
 def degree(static, parents):
     return static._topology_degree(parents)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope='session')
 def pooling(static, degree, parents):
     return static._calculate_pooling_for_level(parents, degree)
 
@@ -92,6 +94,35 @@ def test_all_pooling(static):
                                                      (8, 9): [(19, 20), (20, 21)],
                                                      (0, 10): [(0, 22), (22, 23)],
                                                      (10, 11): [(23, 24), (24, 25)]}]
+
+
+def test_foot_contact_lost():
+    fake_image = np.load('fake_img.npy')
+    params = np.load('params.npy', allow_pickle=True).item()
+
+    motion_data_raw = np.load('../data/edge_rot_data.npy', allow_pickle=True)
+    # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+
+    static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
+                        offsets=offsets,
+                        names=motion_data_raw[0]['names_with_root'],
+                        n_channels=4,
+                        enable_global_position=False,
+                        enable_foot_contact=False,
+                        rotation_representation='quaternion')
+
+    from train import g_foot_contact_loss_v2
+
+    use_velocity = 'use_velocity' in params['edge_rot'] and params['edge_rot']['use_velocity']
+
+    # params['edge_rot']['std'] = params['edge_rot']['std'].cpu()
+    # params['edge_rot']['mean'] = params['edge_rot']['mean'].cpu()
+
+    res = g_foot_contact_loss_v2(torch.tensor(fake_image), static, params['edge_rot'], 1, use_velocity)
+    diff = np.power(res.cpu() - params['golden'], 2)
+
+    assert diff < 1e-5
 
 # plot_static = StaticData.init_from_bvh(BVH_EXAMPLE)
 # for parent in plot_static.parents_list:
