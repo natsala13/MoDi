@@ -40,6 +40,7 @@
 * why arnt edge and joints (parents list) consistent? do we need both of them? They are supposed to be consistent.
 -> for some reason parent list is edges indexes in edge list.
 * Whats the use of enable foot contact? it adds edges to parent list.
+* Where are those conversions between array and tensor happening?
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
@@ -53,12 +54,11 @@
 [v] update git.
 [v] add root position.
 [v] add foot location.
-[X] pooling for after rest position. - MAKE AUTOMATIC
-[ ] reverse lists
-[ ] return offsets.
-[ ] Create dynamic class.
-[ ] Reverse parent list order.
-[ ] Neighbors list
+[X] pooling for after primal skeleton. - MAKE AUTOMATIC
+[v] reverse lists
+[v] return offsets.
+[v] Create dynamic class.
+[X] Neighbors list
 [ ] Remove root position and foot contact.
 
 [ ] make generation working using motion class.
@@ -67,6 +67,12 @@
 [ ] make skeleton dist1 and dist0 pooling the same - its just mean/max pooling vs spatial pooling from same list.
 [ ] look up pre process edges - makes some preprocessing on all bvh data before using it.
 [ ] Maybe change the skeleton traits to hold a static object.
+[ ] names of feet are not the same for rvery topology...
+
+[ ] Reducing size of model - look up at 3d -> 2d convolutions in traits.
+
+PREPROCESSING
+[ ] list to specify wchich joint we are using out of all ones.
 
 """
 
