@@ -11,7 +11,7 @@ import torch.distributed as dist
 from torch.utils.data import TensorDataset
 from tqdm import tqdm
 
-from utils.visualization import motion2fig, motion2bvh
+from utils.visualization import motion2fig, motion2bvh, motion2fig_orig
 from utils.data import calc_bone_lengths
 from utils.traits import *
 from utils.data import foot_names
@@ -385,15 +385,26 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     },
                     osp.join(args.model_save_path, f"checkpoint/{str(i).zfill(6)}.pt")
                 )
-                fake_motion = fake_img.transpose(1,2).detach().cpu().numpy()
+                fake_motion = fake_img.transpose(1, 2).detach().cpu().numpy()
+                normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
+                                      'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
+                                      'parents_with_root': edge_rot_dict_general['parents_with_root']}
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
-                motion2bvh(fake_motion[0], motion_path, parents=static.parents_list, entity=static.str(), edge_rot_dict_general=edge_rot_dict_general)
+
+                motion2bvh(fake_motion[0], motion_path, parents=static.parents_list,
+                           entity=static.str(), normalisation_data=normalisation_data2, static=static)
+
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i, local_path=motion_path)
 
-                fig = motion2fig(fake_motion, H=512, W=512, entity=static.str(),
-                                 edge_rot_dict_general=edge_rot_dict_general)
+                fig = motion2fig(static, fake_motion,
+                                 normalisation_data=normalisation_data2, edge_rot_dict_general=edge_rot_dict_general)
+
+                # fig = motion2fig_orig(fake_motion, entity='Edge',
+                #                     edge_rot_dict_general=edge_rot_dict_general)
+
+
                 fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
                 fig.savefig(fig_path, dpi=300, bbox_inches='tight')
                 plt.close()  # close figure
@@ -502,7 +513,6 @@ def main(args_not_parsed):
                         enable_global_position=args.glob_pos,
                         enable_foot_contact=args.foot,
                         rotation_representation=args.rotation_repr)
-    dynamic = DynamicData.init_from_bvh(args.bvh)
 
     if args.foot:  # TODO: Why is that?
         args.axis_up = 1

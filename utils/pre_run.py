@@ -236,6 +236,21 @@ def _parse_interp_seeds(s):
 
 
 def setup_env(args, get_traits=False):
+
+    # TODO: Remove following lines...
+    if args.glob_pos:
+        # add global position adjacency nodes to neighbouring lists
+        # this method must be called BEFORE the Generator and the Discriminator are initialized
+        Edge.enable_global_position()
+
+    if 'Edge' in args.entity and args.rotation_repr == 'repr6d':
+        Edge.enable_repr6d()
+
+    if args.foot:
+        Edge.enable_foot_contact()
+        args.axis_up = 1
+    ##################################################
+
     if get_traits:
         from utils.traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits,\
             NonSkeletonAwareTraits, SkeletonAwareFastConvTraits

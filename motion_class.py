@@ -46,6 +46,7 @@
 * What to do with mean and std?
 * Whats the use of enable foot contact? it adds edges to parent list.
 * Where are those conversions between array and tensor happening?
+* why do we sort joints? they are the same order as the input.
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
@@ -89,6 +90,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from Motion.AnimationStructure import children_list
+from Motion.Quaternions import Quaternions
+from Motion.Animation import Animation
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'
@@ -470,21 +473,54 @@ class StaticData:
 
 
 class DynamicData:
-    def __init__(self, motion: torch.tensor):
-        self.motion = motion
+    def __init__(self, motion: torch.tensor, static: StaticData):
+        self.motion = motion.transpose(2, 0, 1)  # Shape is T x J x K = frames x joints x channels
+        self.static = static
+
+        if self.motion.shape[1] != len(static.parents_list[-1]) or self.motion.shape[2] != static.n_channels:
+            import ipdb;ipdb.set_trace()
+        # assert motion.shape[0] == len(static.parents_list[-1])
+        # assert motion.shape[1] == static.n_channels
 
     @classmethod
-    def init_from_bvh(cls, bvf_filepath: str):
-        animation, _, _ = BVH.load(bvf_filepath)
-        return cls(animation.rotations)
+    def init_from_bvh(cls, bvf_filepath: str,
+                      enable_global_position=False,
+                      enable_foot_contact=False,
+                      rotation_representation='quaternion'):
+
+        animation, names, frametime = BVH.load(bvf_filepath)
+
+        static = StaticData(animation.parents, animation.offsets, names,
+                            enable_global_position=enable_global_position,
+                            enable_foot_contact=enable_foot_contact,
+                            rotation_representation=rotation_representation)
+
+        return cls(animation.rotations.qs,static)
 
     # @property
     # def motion(self) -> torch.tensor:
     #     raise NotImplementedError
 
     @property
+    def n_frames(self):
+        return self.motion.shape[0]  # TODO: Change...
+
+    @property
+    def n_channels(self):
+        return self.motion.shape[2]
+
+    @property
+    def n_joints(self):
+        return len(self.static.names)
+        # return self.motion.shape[1]
+
+    @property
     def edge_rotations(self) -> torch.tensor:
-        raise NotImplementedError
+        foot_contact_joints = 2 if self.static.is_foot_contact_enabled() else 0
+        global_position_joint = 1 if self.static.is_global_position_enabled() else 0
+        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[1]
+
+        return self.motion[:, :self.n_joints, :]
 
     @property
     def foot_contact(self) -> torch.tensor:
@@ -494,6 +530,53 @@ class DynamicData:
     def root_location(self) -> torch.tensor:
         raise NotImplementedError
 
-    @property
-    def static(self) -> StaticData:
-        raise NotImplementedError
+    # @property
+    # def static(self) -> StaticData:
+    #     raise NotImplementedError
+
+    def normalise(self, mean: torch.tensor, std: torch.tensor):  # TODO: Implement somehow.
+        self.motion = self.motion * std + mean
+
+
+def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
+    offsets = static.offsets  # TODO: first row of root_offset is all zeros for some reason.
+    offsets[0, :] = 0
+    # assert (offsets == np.insert(edge_rot_dict2['offsets_no_root'], root_idx, edge_rot_dict2['offset_root'], axis=0)).all()
+
+    positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
+    # positions[:, root_idx] = edge_rot_dict2['pos_root']  # TODO: Why do we do that?
+
+    orients = Quaternions.id(dynamic.n_joints)
+
+    rotations = Quaternions(dynamic.edge_rotations)
+    # assert (rotations == Quaternions(np.insert(edge_rot_dict2['rot_edge_no_root'], root_idx, edge_rot_dict2['rot_root'], axis=1))).all()
+
+    if rotations.shape[-1] == 6:  # repr6d
+        from Motion.transforms import repr6d2quat
+        rotations = repr6d2quat(rotations)
+
+    anim_edges = Animation(rotations, positions, orients, offsets, static.parents)
+
+    # TODO: Why do we need to sort names? isnt it already sorted correctly?
+    # sorted_order = get_sorted_order(anim_edges.parents)
+    # anim_edges_sorted = anim_edges[:, sorted_order]
+    # names_sorted = edge_rot_dict['names_with_root'][sorted_order]
+
+    # expand joints
+    # anim_exp, _, names_exp, _ = expand_topology_edges(anim_edges, names=static.names, nearest_joint_ratio=1)
+
+    # anim_exp = anim_edges
+    # names_exp = static.names
+    # move rotation values to parents
+    # children_all_joints = children_list(anim_exp.parents)
+    # for idx, children_one_joint in enumerate(children_all_joints[1:]):
+    #     parent_idx = idx + 1
+    #     if len(children_one_joint) > 0:  # not leaf
+    #         assert len(children_one_joint) == 1 or (anim_exp.offsets[children_one_joint] == np.zeros(3)).all() and (
+    #                 anim_exp.rotations[:, children_one_joint] == Quaternions.id((n_frames, 1))).all()
+    #         anim_exp.rotations[:, parent_idx] = anim_exp.rotations[:, children_one_joint[0]]
+    #     else:
+    #         anim_exp.rotations[:, parent_idx] = Quaternions.id((n_frames))
+
+    return anim_edges, static.names
+
