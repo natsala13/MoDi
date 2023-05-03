@@ -6,7 +6,7 @@ import pandas as pd
 
 import torch
 import numpy as np
-from utils.visualization import motion2fig, motion2bvh
+from utils.visualization import motion2fig, motion2bvh_rot
 import matplotlib.pyplot as plt
 import sys as _sys
 from utils.data import motion_from_raw, to_cpu
@@ -176,12 +176,9 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
         mean_latent = g_ema.mean_latent(args.truncation_mean)
         generated_motions = type2func[args.type](args, g_ema, device, mean_latent)
 
-    if static.str() == 'Joint':
-        edge_rot_dict_general = None
-    else:
-        _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))  # TODO: Remove use of that dictionnary.
-        edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
-        edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
+    _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))  # TODO: Remove use of that dictionnary.
+    edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
+    edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
 
     if args.out_path is not None:
         out_path = args.out_path
@@ -220,9 +217,15 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
         # save one figure of several motions
         n_sampled_frames = 10
         n_motions = min(10, len(motion_np))
-        fig = motion2fig(motion_np, H=512, W=512, n_sampled_motions=n_motions,
+
+        normalisation_data = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
+                              'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
+                              'parents_with_root': edge_rot_dict_general['parents_with_root']}
+        fig = motion2fig(static, motion_np, normalisation_data,
+                         n_sampled_motions=n_motions,
                          n_sampled_frames=n_sampled_frames,
-                         entity=static.str(), edge_rot_dict_general=edge_rot_dict_general)
+                         edge_rot_dict_general=edge_rot_dict_general)
+
         prefix_no_underscore = prefix.replace('_', '')
         fig_name = osp.join(out_path, f'{prefix_no_underscore}.png')
         dpi = max(n_motions, n_sampled_frames) * 100
@@ -237,9 +240,8 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
                 cluster_label = generated_motion.cluster_label[idx]
                 cluster_label = torch.argmax(cluster_label).item()
                 id = f'g{cluster_label:02d}_{id}'
-            motion2bvh(motion_np[i], osp.join(out_path, f'{prefix}{id}.bvh'),
-                       parents=static.parents_list, type=args.type, entity=static.str(),
-                       edge_rot_dict_general=edge_rot_dict_general)
+            motion2bvh_rot(motion_np[i], osp.join(out_path, f'{prefix}{id}.bvh'),
+                           normalisation_data, static)
 
     # save args
     pd.Series(args.__dict__).to_csv(osp.join(root_out_path, 'args.csv'), sep='\t', header=None)

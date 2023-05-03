@@ -5,7 +5,7 @@ from tqdm import tqdm
 import torch
 import sys
 
-from utils.visualization import motion2bvh
+from utils.visualization import motion2bvh_rot
 from utils.data import Joint, Edge # used by the 'eval' command
 from utils.pre_run import OptimOptions, load_all_form_checkpoint
 
@@ -38,7 +38,7 @@ def inverse_optim(args, g_ema, discriminator, device, mean_latent, target_motion
     optim = torch.optim.Adam([target_W], lr=args.lr)
 
     os.makedirs(args.out_path, exist_ok=True)
-    save_bvh = functools.partial(motion2bvh, edge_rot_dict_general=edge_rot_dict_general, entity='Edge')
+    save_bvh = functools.partial(motion2bvh_rot, normalisation_data=edge_rot_dict_general)
     save_bvh(target_motion.permute(0, 2, 1, 3).detach().cpu().numpy(), osp.join(args.out_path, 'target.bvh'))
 
     for i in loop:

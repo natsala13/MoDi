@@ -11,7 +11,7 @@ import torch.distributed as dist
 from torch.utils.data import TensorDataset
 from tqdm import tqdm
 
-from utils.visualization import motion2fig, motion2bvh, motion2fig_orig
+from utils.visualization import motion2fig, motion2bvh_rot, motion2fig_orig
 from utils.data import calc_bone_lengths
 from utils.traits import *
 from utils.data import foot_names
@@ -392,8 +392,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
 
-                motion2bvh(fake_motion[0], motion_path, parents=static.parents_list,
-                           entity=static.str(), normalisation_data=normalisation_data2, static=static)
+                motion2bvh_rot(fake_motion[0], motion_path, normalisation_data, static)
 
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i, local_path=motion_path)
@@ -427,7 +426,7 @@ def calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints
     stgcn_model = evaluate.initialize_model(device, modelpath=args.action_recog_model, dataset=args.dataset)
 
     # generate motions
-    generated_motions = evaluate.generate(args, g_ema, device, mean_joints, std_joints, static=static)
+    generated_motions = evaluate.generate(args, g_ema, device, mean_joints, std_joints)
     generated_motions = generated_motions[:, :15]
     generated_motions -= generated_motions[:, 8:9, :, :]
     iterator_generated = data.DataLoader(generated_motions, batch_size=500, shuffle=False, num_workers=8)

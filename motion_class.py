@@ -77,6 +77,8 @@
 [ ] Remove root position and foot contact.
 [ ] Dynamic class - use velocity flag
 [ ] Remove expand topology
+[ ] generate function exist both in generate and in evaluate.
+[ ] Stop woth default None values.
 
 [ ] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
@@ -142,19 +144,15 @@ class StaticData:
         # Configurations
         self.__n_channels = n_channels
 
-        self.enable_global_position_flag = False
-        self.enable_foot_contact_flag = False
+        self.enable_global_position = enable_global_position
+        self.enable_foot_contact = enable_foot_contact
 
         if enable_global_position:
-            self.enable_global_position()
+            self._enable_global_position()
         if enable_foot_contact:
-            self.enable_foot_contact()
+            self._enable_foot_contact()
         if rotation_representation == 'repr6d':
-            self.enable_repr6d()
-
-    @staticmethod
-    def str():  # TODO: Understand how to remove that.
-        return 'Edge'
+            self._enable_repr6d()
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False,
@@ -185,10 +183,10 @@ class StaticData:
     def n_channels(self) -> int:
         return self.__n_channels
 
-    def enable_repr6d(self):  # TODO: Instead of using this function, just create the Static data with configuration.
+    def _enable_repr6d(self):  # TODO: Instead of using this function, just create the Static data with configuration.
         self.__n_channels = 6
 
-    def enable_marker4(self):
+    def _enable_marker4(self):
         self.__n_channels = 12
     # @n_channels.setter
     # def n_channels(self, val: int) -> None:
@@ -201,21 +199,15 @@ class StaticData:
     def save_to_bvh(self, out_filepath: str) -> None:
         raise NotImplementedError
 
-    def is_global_position_enabled(self):  # TODO: remove
-        return self.enable_global_position_flag
-
-    def enable_global_position(self):
+    def _enable_global_position(self):
         """
-        TODO: Fooly understand why is it for...
+        TODO: Maybe try and remove that edge?
         add a special entity that would be the global position.
         The entity is appended to the edges list.
         No need to really add it in edges_list and all the other structures that are based on tupples. We add it only
         to the structures that are based on indices.
         Its neighboring edges are the same as the neightbors of root """
-
-        if self.enable_global_position_flag:
-            return
-        self.enable_global_position_flag = True
+        assert self.parents_list[0][-1] != -2
 
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
             for pooling_hierarchical_stage in pooling_list:
@@ -226,10 +218,6 @@ class StaticData:
         for parents in self.parents_list:
             parents.append(-2)
 
-    def is_foot_contact_enabled(self, level=-1):
-        # return any([isinstance(parent, tuple) and parent[0] == -3 for parent in cls.parents_list[level]])
-        return self.enable_foot_contact_flag
-
     def foot_indexes(self):
         """Run overs pooling list and calculate foot location at each level"""
         foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
@@ -239,43 +227,25 @@ class StaticData:
 
         return all_foot_indexes[::-1]
 
-    def enable_foot_contact(self):
+    def _enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
         The entities are appended to the edges list.
         No need to really add them in edges_list and all the other structures that are based on tuples. We add them only
         to the structures that are based on indices.
         Their neighboring edges are the same as the neighbors of the feet """
+        assert not isinstance(self.parents_list[0][-1], tuple)
 
-        if self.enable_foot_contact_flag:
-            return
-
-        self.enable_foot_contact_flag = True
-
-        all_foot_indeces = self.foot_indexes()
-
-        for parent, foot_indeces in zip(self.parents_list, all_foot_indeces):
-            for foot_index in foot_indeces:
+        all_foot_indexes = self.foot_indexes()
+        for parent, foot_indexes in zip(self.parents_list, all_foot_indexes):
+            for foot_index in foot_indexes:
                 parent.append((-3, foot_index))
 
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
-            for pooling_hierarchical_stage, foot_indeces in zip(pooling_list, all_foot_indeces):  # TODO: Do not update the last one
-                for _ in foot_indeces:
+            for pooling_hierarchical_stage, foot_indexes in zip(pooling_list, all_foot_indexes):  # TODO: Do not update the last one
+                for _ in foot_indexes:
                     n_small_stage = max(pooling_hierarchical_stage.keys()) + 1
                     n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
                     pooling_hierarchical_stage[n_small_stage] = [n_large_stage]
-
-
-        # for hierarchical_stage_idx, (feet_idx, parents) in enumerate(zip(cls.feet_idx_list, cls.parents_list)):
-        #     for idx, foot in enumerate(feet_idx):
-        #         # new entry's 'parent' would be a tuple (-3, foot)
-        #         parents.append((-3, foot))
-        #
-        #         if hierarchical_stage_idx < cls.n_hierarchical_stages-1:  # update pooling only for stages lower than last
-        #             last_idx_this = cls.n_edges[hierarchical_stage_idx] + idx
-        #             last_idx_larger = cls.n_edges[hierarchical_stage_idx+1] + idx
-        #             for pooling_list in [cls.skeletal_pooling_dist_0, cls.skeletal_pooling_dist_1]:
-        #                 # last entry in current hierarchy pools from last entry in larger hierarchy
-        #                 pooling_list[hierarchical_stage_idx][last_idx_this] = [last_idx_larger]
 
     @staticmethod
     def _topology_degree(parents: [int]):
@@ -359,10 +329,6 @@ class StaticData:
         pooling = [{(edge[0][0], edge[-1][-1]): edge for edge in StaticData._pooling_for_edges_list(edges)} for edges in
                    edges_sequences]
         pooling = StaticData.flatten_dict(pooling)
-
-        # pooling2 = [{joints[-1]: joints for joints in StaticData._pooling_for_edges_list(joints_sequence[1:])} for joints_sequence in
-        #            all_sequences]
-        # pooling2 = StaticData.flatten_dict(pooling2)
 
         return pooling
 

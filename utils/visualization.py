@@ -198,7 +198,8 @@ def motion2fig_orig(data, H=512, W=512, n_sampled_motions=5, n_sampled_frames=5,
 
 
 # motion2fig_multiple_motions
-def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motions=5, n_sampled_frames=5, normalisation_data=None, edge_rot_dict_general=None):
+def motion2fig(static: StaticData, data,  normalisation_data, height=512, width=512, n_sampled_motions=5,
+               n_sampled_frames=5, edge_rot_dict_general=None):
 
     dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
 
@@ -265,12 +266,12 @@ def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motion
     return fig
 
 
-def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint', normalisation_data=None, static=None):
-    assert entity in ['Joint', 'Edge']
-    if entity == 'Joint':
-        motion2bvh_loc(motion_data, bvh_file_path, parents, type)
-    else:
-        motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
+# def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint', normalisation_data=None, static=None):
+#     assert entity in ['Joint', 'Edge']
+#     if entity == 'Joint':
+#         motion2bvh_loc(motion_data, bvh_file_path, parents, type)
+#     else:
+#     motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
 def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
@@ -338,7 +339,7 @@ def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):
                 one_motion2bvh(sub_motion, sub_bvh_file_path, parents=parents[i], is_openpose=is_openpose)
             elif type == 'edit':
                 sub_bvh_file_path = bvh_file_path.replace('.bvh', '_'+'{:02d}'.format(i)+'.bvh')
-                motion2bvh(sub_motion, sub_bvh_file_path, parents)
+                motion2bvh_loc(motion_data, bvh_file_path, parents, type)
             else:
                 raise('unsupported type for list manipulation')
     else:
