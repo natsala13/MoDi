@@ -169,8 +169,8 @@ class EvaluateOptions(TestBaseOptions):
 
         parser.add_argument('--act_rec_gt_path', type=str,
                             help='path to ground truth file that was used during action recognition train. Not needed unless is different from the one used by the synthesis network')
-        parser.add_argument('--fast', action='store_true', help='skip metrics that require long evaluation')
         parser.add_argument('--actor_motions_path', type=str, help='path to randomly generated actor motions')
+        parser.add_argument('--bvh', type=str, default='tests/motion0.bvh', help='Path to bvh containing motion topology')
 
 
 class EditOptions(TestBaseOptions):
@@ -191,7 +191,7 @@ class EditOptions(TestBaseOptions):
 # endregion
 
 def get_ckpt_args(args, loaded_args):
-    network_args_unique = ['skeleton', 'entity', 'glob_pos', 'joints_pool', 'conv3', 'foot', 'normalize',
+    network_args_unique = ['skeleton', 'entity', 'glob_pos', 'joints_pool', 'conv3', 'fast', 'foot', 'normalize',
                            'axis_up', 'use_velocity', 'rotation_repr', 'latent',
                            'n_frames_dataset', 'n_inplace_conv', 'n_mlp', 'channel_multiplier']
     network_args_non_unique = ['path']
@@ -236,6 +236,21 @@ def _parse_interp_seeds(s):
 
 
 def setup_env(args, get_traits=False):
+
+    # TODO: Remove following lines...
+    if args.glob_pos:
+        # add global position adjacency nodes to neighbouring lists
+        # this method must be called BEFORE the Generator and the Discriminator are initialized
+        Edge.enable_global_position()
+
+    if 'Edge' in args.entity and args.rotation_repr == 'repr6d':
+        Edge.enable_repr6d()
+
+    if args.foot:
+        Edge.enable_foot_contact()
+        args.axis_up = 1
+    ##################################################
+
     if get_traits:
         from utils.traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits,\
             NonSkeletonAwareTraits, SkeletonAwareFastConvTraits
@@ -265,9 +280,19 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
 
     args = get_ckpt_args(args, checkpoint['args'])
 
-    traits_class = setup_env(args, get_traits=True)
+    traits_class = setup_env(args, get_traits=True)  # TODO: Why arn't all this params saved in the model's checkpoint?
 
-    static = StaticData.init_from_bvh(args.bvh)
+    motion_data_raw = np.load(args.path, allow_pickle=True)
+    # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+    static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
+                        offsets=offsets,
+                        names=motion_data_raw[0]['names_with_root'],
+                        n_channels=4,
+                        enable_global_position=args.glob_pos,
+                        enable_foot_contact=args.foot,
+                        rotation_representation=args.rotation_repr)
+
 
     g_ema = Generator(
         args.latent, args.n_mlp, traits_class=traits_class, static=static, n_inplace_conv=args.n_inplace_conv

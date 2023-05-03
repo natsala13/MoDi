@@ -549,7 +549,7 @@ def anim_from_edge_motion_data(edge_motion_data, edge_rot_dict_general):
     return anims, names
 
 
-def anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips'):
+def basic_anim_from_rot(edge_rot_dict, root_name='Hips'):
     assert root_name in edge_rot_dict['names_with_root']
     root_idx = np.where(edge_rot_dict['names_with_root'] == root_name)[0][0]
     n_frames = edge_rot_dict['rot_edge_no_root'].shape[0]
@@ -561,10 +561,17 @@ def anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips'):
     orients = Quaternions.id(n_joints)
     rotations = Quaternions(np.insert(edge_rot_dict['rot_edge_no_root'], root_idx, edge_rot_dict['rot_root'], axis=1))
 
-    if rotations.shape[-1] == 6:    # repr6d
+    if rotations.shape[-1] == 6:  # repr6d
         from Motion.transforms import repr6d2quat
         rotations = repr6d2quat(rotations)
     anim_edges = Animation(rotations, positions, orients, offsets, parents)
+
+    return anim_edges
+
+
+def anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips'):
+    n_frames = edge_rot_dict['rot_edge_no_root'].shape[0]
+    anim_edges = basic_anim_from_rot(edge_rot_dict, root_name)
 
     sorted_order = get_sorted_order(anim_edges.parents)
     anim_edges_sorted = anim_edges[:, sorted_order]
@@ -583,6 +590,7 @@ def anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips'):
             anim_exp.rotations[:, parent_idx] = anim_exp.rotations[:, children_one_joint[0]]
         else:
             anim_exp.rotations[:, parent_idx] = Quaternions.id((n_frames))
+
     return anim_exp, names_exp
 
 

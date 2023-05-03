@@ -14,6 +14,8 @@ from utils.data import Joint, Edge
 from utils.data import calc_bone_lengths
 from utils.data import edge_rot_dict_from_edge_motion_data, anim_from_edge_rot_dict
 from utils.data import to_list_4D, un_normalize
+from motion_class import StaticData, DynamicData, anim_from_edge_rot_dict2
+
 
 def pose2im_all(all_peaks, H=512, W=512):
     limbSeq = [[1, 2], [2, 3], [3, 4],                       # right arm
@@ -117,8 +119,7 @@ def motion2fig_1_motion_3_angles(data, H=512, W=512):
     return fig
 
 
-# motion2fig_multiple_motions
-def motion2fig(data, H=512, W=512, n_sampled_motions=5, n_sampled_frames=5, entity='Joint', edge_rot_dict_general=None):
+def motion2fig_orig(data, H=512, W=512, n_sampled_motions=5, n_sampled_frames=5, entity='Joint', edge_rot_dict_general=None):
 
     # in case data contains sub-motions, use only the full ones
     if isinstance(data[0], list):
@@ -196,15 +197,83 @@ def motion2fig(data, H=512, W=512, n_sampled_motions=5, n_sampled_frames=5, enti
     return fig
 
 
-def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint', edge_rot_dict_general=None):
+# motion2fig_multiple_motions
+def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motions=5, n_sampled_frames=5, normalisation_data=None, edge_rot_dict_general=None):
+
+    dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
+
+    n_sampled_motions = min(n_sampled_motions, data.shape[0], 10)
+    sampled_frames = np.linspace(0, dynamics[0].n_frames-1, n_sampled_frames).round().astype(int)
+
+    # data shape: n_samples x n_joints x n_features x n_frames
+    assert not isinstance(data, list) and not isinstance(data[0], dict)
+
+    data = data * normalisation_data['std'] + normalisation_data['mean']
+    for dynamic in dynamics:
+        dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+        dynamic.sample_frames(sampled_frames)
+
+    sampled_data = data[:n_sampled_motions][:, :, :, sampled_frames]
+    sampled_data = to_list_4D(sampled_data)
+
+    # edge_rot_dict_general = normalisation_data
+    sampled_edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
+    sampled_edge_rot_dict_general['rot_edge_no_root'] = sampled_edge_rot_dict_general['rot_edge_no_root'][sampled_frames]
+    sampled_edge_rot_dict_general['pos_root'] = sampled_edge_rot_dict_general['pos_root'][sampled_frames]
+    sampled_edge_rot_dict_general['rot_root'] = sampled_edge_rot_dict_general['rot_root'][sampled_frames]
+
+    edge_rots_dict, _, _ = edge_rot_dict_from_edge_motion_data(sampled_data, edge_rot_dict_general=sampled_edge_rot_dict_general)
+
+    # one_anim, names = anim_from_edge_rot_dict(sampled_edge_rot_dict_general)
+    anim, names = anim_from_edge_rot_dict2(static, dynamics[0])
+    one_anim_shape = anim.shape
+
+    # joints = np.zeros((n_sampled_motions, dynamics[0].n_frames, dynamic.n_joints, 3))
+    joints = np.zeros((n_sampled_motions,) + one_anim_shape + (3,))  # TODO: Change
+    for idx, (dynamic, one_edge_rot_dict) in enumerate(zip(dynamics, edge_rots_dict)):
+        anim, _ = anim_from_edge_rot_dict(one_edge_rot_dict)
+        anim2, _ = anim_from_edge_rot_dict2(static, dynamic)
+        joints[idx] = Animation.positions_global(anim2)
+
+
+    figure_joints = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
+       'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
+       'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+    figure_indexes = [list(names).index(joint) for joint in figure_joints]
+
+    # anim_joints_1_to_open_pose = [7, 6, 15, 16, 17, 10, 11, 12, 0, 23, 24, 25, 19, 20, 21]  # TODO: What is that??
+
+    data = joints[:, :, figure_indexes, :]
+    data = data.transpose(0, 2, 3, 1)  # samples x frames x joints x features ==> samples x joints x features x frames
+    data = data[:, :, :2, :]  # use the xy projection
+
+    data = stretch(data, height, width)
+
+    fig, axes = plt.subplots(n_sampled_motions, n_sampled_frames)
+    if axes.ndim == 1:  # if there is only one motion
+        axes = axes[np.newaxis, :]
+    max_w, max_h = np.ceil(data.max(axis=(0,1,3))).astype(int)
+    for motion_idx in np.arange(n_sampled_motions):
+        for frame_idx in np.arange(n_sampled_frames):
+            skeleton = data[motion_idx,:,:,frame_idx]
+            img = pose2im_all(skeleton, max_h, max_w)
+            axes[motion_idx, frame_idx].axis('off')
+            try:
+                axes[motion_idx, frame_idx].imshow(img[::-1,:]) # image y axis is inverted
+            except:
+                pass # in some configurations the image cannot be shown
+    return fig
+
+
+def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint', normalisation_data=None, static=None):
     assert entity in ['Joint', 'Edge']
     if entity == 'Joint':
         motion2bvh_loc(motion_data, bvh_file_path, parents, type)
     else:
-        motion2bvh_rot(motion_data, bvh_file_path, type=type, edge_rot_dict_general=edge_rot_dict_general)
+        motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
-def motion2bvh_rot(motion_data, bvh_file_path, type, edge_rot_dict_general=None):
+def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
 
     if isinstance(motion_data, dict):
         # input is of type edge_rot_dict (e.g., read from GT file)
@@ -213,26 +282,35 @@ def motion2bvh_rot(motion_data, bvh_file_path, type, edge_rot_dict_general=None)
         is_sub_motion = False
     else:
         # input is at the format of an output of the network
-        motion_data = to_list_4D(motion_data)
-        motion_data = un_normalize(motion_data, mean=edge_rot_dict_general['mean'].transpose(0, 2, 1, 3), std=edge_rot_dict_general['std'].transpose(0, 2, 1, 3))
-        edge_rot_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type=type,
-                                                                                     edge_rot_dict_general=edge_rot_dict_general)
+        motion_data = to_list_4D(motion_data)  # add batch dimension and list dimention 1
+        motion_data = un_normalize(motion_data,
+                                   mean=normalisation_data['mean'],
+                                   std=normalisation_data['std'])
+        # edge_rot_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type=type,
+        #                                                                              edge_rot_dict_general=edge_rot_dict_general)
 
     # from this point input is a list of edge_rot_dicts
-    for i, (edge_rot_dict, frame_mult) in enumerate(zip(edge_rot_dicts, frame_mults)):
-        anim, names = anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips')
-        if is_sub_motion:
-            suffix = '_{}x{}'.format(edge_rot_dict['rot_edge_no_root'].shape[1]+1, int(edge_rot_dict['rot_edge_no_root'].shape[0]/frame_mult))
-        elif type == 'edit':
-            suffix = '_{:02d}'.format(i)
-        else:
-            suffix = ''
-        bvh_sub_file_path = bvh_file_path.replace('.bvh', suffix + '.bvh')
-        bvh_file_dir = osp.split(bvh_sub_file_path)[0]
+    # for i, (edge_rot_dict, frame_mult) in enumerate(zip(edge_rot_dicts, frame_mults)):
+    for idx, motion in enumerate(motion_data):
+        # anim, names = anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips')
+        dynamic = DynamicData(motion[0], static)  # TODO: We need to normalise the motion as here.
+        anim, names = anim_from_edge_rot_dict2(static, dynamic)
+
+        # if is_sub_motion:
+        #     suffix = f'_{dynamic.n_frames}x{dynamic.n_joints}'
+        # elif type == 'edit':
+        #     suffix = f'_{idx}'
+        # else:
+        #     suffix = ''
+        # bvh_sub_file_path = bvh_file_path.replace('.bvh', suffix + '.bvh')
+
+        bvh_file_dir = osp.split(bvh_file_path)[0]
         os.makedirs(bvh_file_dir, exist_ok=True)
-        BVH.save(bvh_sub_file_path, anim, names)
-        if 'contact' in edge_rot_dict and edge_rot_dict['contact'] is not None:
-            np.save(bvh_sub_file_path + '.contact.npy', edge_rot_dict['contact'])
+
+        BVH.save(bvh_file_path, anim, names)
+
+        # if 'contact' in edge_rot_dict and edge_rot_dict['contact'] is not None:
+        #     np.save(bvh_sub_file_path + '.contact.npy', edge_rot_dict['contact'])
 
 
 def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):

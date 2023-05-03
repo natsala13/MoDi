@@ -144,7 +144,7 @@ def main(args_not_parsed):
     args = parser.parse_args(args_not_parsed)
     device = args.device
 
-    g_ema, discriminator, checkpoint, entity, mean_joints, std_joints = load_all_form_checkpoint(args.ckpt, args)
+    g_ema, discriminator, checkpoint, static, mean_joints, std_joints = load_all_form_checkpoint(args.ckpt, args)
 
     if not (getattr(args, 'test_model', None) ^ getattr(args, 'test_actor', None)):
         setattr(args, 'test_model', True)
@@ -161,7 +161,7 @@ def main(args_not_parsed):
 
     if args.test_model:
         # generate motions
-        generated_motions = generate(args, g_ema, device, mean_joints, std_joints, entity=entity)
+        generated_motions = generate(args, g_ema, device, mean_joints, std_joints, static=static)
         generated_motions = generated_motions[:, :15]
 
     elif args.test_actor:
@@ -217,6 +217,7 @@ def main(args_not_parsed):
     fig_hist_generated = plt.figure()
     plt.bar(*np.unique(yhat.cpu(), return_counts=True))
     plt.title(f'generated {args.ckpt}')
+    plt.savefig('generated_bar_plot.png')
     try:
         plt.show()
     except:
@@ -226,6 +227,7 @@ def main(args_not_parsed):
     fig_hist_dataset = plt.figure()
     plt.bar(*np.unique(yhat.cpu(), return_counts=True))
     plt.title('dataset')
+    plt.savefig('dataset_bar_plot.png')
     try:
         plt.show()
     except:
