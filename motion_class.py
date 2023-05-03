@@ -66,6 +66,8 @@
 [v] Create dynamic class.
 [X] Neighbors list
 [ ] Remove root position and foot contact.
+[ ] Dynamic class - use velocity flag
+[ ] Remove expand topology
 
 [ ] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
@@ -80,18 +82,21 @@
 PREPROCESSING
 [ ] list to specify wchich joint we are using out of all ones.
 
-"""
+NOTES
+* anim_from_edge_rot_dict apply extend joints on motion
+* expand joints is importnat otherwise we see some inconosistency at plotting
 
+"""
+import copy
 import torch
 import numpy as np
-from Motion import BVH
-
 import networkx as nx
 import matplotlib.pyplot as plt
 
-from Motion.AnimationStructure import children_list
-from Motion.Quaternions import Quaternions
+from Motion import BVH
 from Motion.Animation import Animation
+from Motion.Quaternions import Quaternions
+from Motion.AnimationStructure import children_list, get_sorted_order
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'
@@ -142,10 +147,6 @@ class StaticData:
     def str():  # TODO: Understand how to remove that.
         return 'Edge'
 
-    @property
-    def parents(self):
-        return self.parents_list[-1][:len(self.names)]
-
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False,
                       enable_foot_contact=False, rotation_representation='quaternion'):
@@ -154,6 +155,10 @@ class StaticData:
                    enable_global_position=enable_global_position,
                    enable_foot_contact=enable_foot_contact,
                    rotation_representation=rotation_representation)
+
+    @property
+    def parents(self):
+        return self.parents_list[-1][:len(self.names)]
 
     # @property
     # def offsets(self) -> np.ndarray:  # TODO: Should I add also the global position?
@@ -482,6 +487,8 @@ class DynamicData:
         # assert motion.shape[0] == len(static.parents_list[-1])
         # assert motion.shape[1] == static.n_channels
 
+        self.use_velocity = True
+
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str,
                       enable_global_position=False,
@@ -528,7 +535,10 @@ class DynamicData:
 
     @property
     def root_location(self) -> torch.tensor:
-        raise NotImplementedError
+        location = self.motion[:, self.n_joints, :3]  # drop the 4th item in the position tensor
+        location = np.cumsum(location, axis=0) if self.use_velocity else location
+
+        return location
 
     # @property
     # def static(self) -> StaticData:
@@ -537,13 +547,90 @@ class DynamicData:
     def normalise(self, mean: torch.tensor, std: torch.tensor):  # TODO: Implement somehow.
         self.motion = self.motion * std + mean
 
+    def sample_frames(self, frames_indexes: [int]):
+        self.motion = self.motion[frames_indexes, :, :]
 
-def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
+
+def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean=None, nearest_joint_ratio=0.9):
+    assert nearest_joint_ratio == 1, 'currently not supporting nearest_joint_ratio != 1'
+
+    # we do not want to change inputs that are given as views
+    anim = copy.deepcopy(anim)
+    req_joint_idx = copy.deepcopy(req_joint_idx)
+    names = copy.deepcopy(names)
+    offset_len_mean = copy.deepcopy(offset_len_mean)
+
+    n_frames, n_joints_all = anim.shape
+    if req_joint_idx is None:
+        req_joint_idx = np.arange(n_joints_all)
+    if names is None:
+        names = np.array([str(i) for i in range(len(req_joint_idx))])
+
+    # fix the topology according to required joints
+    parent_req = np.zeros(n_joints_all) # fixed parents according to req
+    n_children_req = np.zeros(n_joints_all) # number of children per joint in the fixed topology
+    children_all = children_list(anim.parents)
+    for idx in req_joint_idx:
+        child = idx
+        parent = anim.parents[child]
+        while parent not in np.append(req_joint_idx, -1):
+            child = parent
+            parent = anim.parents[child]
+        parent_req[idx] = parent
+        if parent != -1:
+            n_children_req[parent] += 1
+
+    # find out how many joints have multiple children
+    super_parents = np.where(n_children_req > 1)[0]
+    n_super_children = n_children_req[super_parents].sum().astype(int) # total num of multiple children
+
+    if n_super_children == 0:
+        return anim, req_joint_idx, names, offset_len_mean  # can happen in lower hierarchy levels
+
+    # prepare space for expanded joints, at the end of each array
+    anim.offsets = np.append(anim.offsets, np.zeros(shape=(n_super_children,3)), axis=0)
+    anim.positions = np.append(anim.positions, np.zeros(shape=(n_frames, n_super_children,3)), axis=1)
+    anim.rotations = Quaternions(np.append(anim.rotations, Quaternions.id((n_frames, n_super_children)), axis=1))
+    anim.orients = Quaternions(np.append(anim.orients, Quaternions.id(n_super_children), axis=0))
+    anim.parents = np.append(anim.parents, np.zeros(n_super_children, dtype=int))
+    names = np.append(names, np.zeros(n_super_children, dtype='<U40'))
+    if offset_len_mean is not None:
+        offset_len_mean = np.append(offset_len_mean, np.zeros(n_super_children))
+
+    # fix topology and names
+    new_joint_idx = n_joints_all
+    req_joint_idx = np.append(req_joint_idx, new_joint_idx + np.arange(n_super_children))
+    for parent in super_parents:
+        for child in children_all[parent]:
+            anim.parents[new_joint_idx] = parent
+            anim.parents[child] = new_joint_idx
+            names[new_joint_idx] = names[parent]+'_'+names[child]
+
+            new_joint_idx += 1
+
+    # sort data items in a topological order
+    sorted_order = get_sorted_order(anim.parents)
+    anim = anim[:, sorted_order]
+    names = names[sorted_order]
+    if offset_len_mean is not None:
+        offset_len_mean = offset_len_mean[sorted_order]
+
+    # assign updated locations to req_joint_idx
+    sorted_order_inversed = {num: i for i, num in enumerate(sorted_order)}
+    sorted_order_inversed[-1] = -1
+    req_joint_idx = np.array([sorted_order_inversed[i] for i in req_joint_idx])
+    req_joint_idx.sort()
+
+    return anim, req_joint_idx, names, offset_len_mean
+
+
+def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
     offsets = static.offsets  # TODO: first row of root_offset is all zeros for some reason.
     offsets[0, :] = 0
     # assert (offsets == np.insert(edge_rot_dict2['offsets_no_root'], root_idx, edge_rot_dict2['offset_root'], axis=0)).all()
 
     positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
+    positions[:, 0] = dynamic.root_location
     # positions[:, root_idx] = edge_rot_dict2['pos_root']  # TODO: Why do we do that?
 
     orients = Quaternions.id(dynamic.n_joints)
@@ -557,26 +644,34 @@ def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
 
     anim_edges = Animation(rotations, positions, orients, offsets, static.parents)
 
+    return anim_edges
+
+
+def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
+    anim_edges = basic_anim_from_static(static, dynamic)
+
     # TODO: Why do we need to sort names? isnt it already sorted correctly?
     # sorted_order = get_sorted_order(anim_edges.parents)
     # anim_edges_sorted = anim_edges[:, sorted_order]
-    # names_sorted = edge_rot_dict['names_with_root'][sorted_order]
+    # names_sorted = static.names['names_with_root'][sorted_order]
 
-    # expand joints
-    # anim_exp, _, names_exp, _ = expand_topology_edges(anim_edges, names=static.names, nearest_joint_ratio=1)
+    # expand joints TODO: REMOVE
+    anim_exp, _, names_exp, _ = expand_topology_edges2(anim_edges, names=static.names, nearest_joint_ratio=1)
 
     # anim_exp = anim_edges
     # names_exp = static.names
-    # move rotation values to parents
-    # children_all_joints = children_list(anim_exp.parents)
-    # for idx, children_one_joint in enumerate(children_all_joints[1:]):
-    #     parent_idx = idx + 1
-    #     if len(children_one_joint) > 0:  # not leaf
-    #         assert len(children_one_joint) == 1 or (anim_exp.offsets[children_one_joint] == np.zeros(3)).all() and (
-    #                 anim_exp.rotations[:, children_one_joint] == Quaternions.id((n_frames, 1))).all()
-    #         anim_exp.rotations[:, parent_idx] = anim_exp.rotations[:, children_one_joint[0]]
-    #     else:
-    #         anim_exp.rotations[:, parent_idx] = Quaternions.id((n_frames))
 
-    return anim_edges, static.names
+    # move rotation values to parents
+    children_all_joints = children_list(anim_exp.parents)
+    for idx, children_one_joint in enumerate(children_all_joints[1:]):
+        parent_idx = idx + 1
+        if len(children_one_joint) > 0:  # not leaf
+            assert len(children_one_joint) == 1 or (anim_exp.offsets[children_one_joint] == np.zeros(3)).all() and (
+                    anim_exp.rotations[:, children_one_joint] == Quaternions.id((dynamic.n_frames, 1))).all()
+            anim_exp.rotations[:, parent_idx] = anim_exp.rotations[:, children_one_joint[0]]
+        else:
+            anim_exp.rotations[:, parent_idx] = Quaternions.id((dynamic.n_frames))
+
+    return anim_exp, names_exp
+    # return anim_edges, static.names
 

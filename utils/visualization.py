@@ -200,20 +200,9 @@ def motion2fig_orig(data, H=512, W=512, n_sampled_motions=5, n_sampled_frames=5,
 # motion2fig_multiple_motions
 def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motions=5, n_sampled_frames=5, normalisation_data=None, edge_rot_dict_general=None):
 
-    # # in case data contains sub-motions, use only the full ones
-    # if isinstance(data[0], list):
-    #     data = [motion[-1] for motion in data]
-    #     data = np.concatenate(data)
-    #
-    # # data coming from 'generate' can be a list
-    # if isinstance(data, list):
-    #     data = np.vstack(data)
     dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
 
-    # import ipdb;ipdb.set_trace()
-
     n_sampled_motions = min(n_sampled_motions, data.shape[0], 10)
-    # sampled_motions = np.arange(n_sampled_motions)
     sampled_frames = np.linspace(0, dynamics[0].n_frames-1, n_sampled_frames).round().astype(int)
 
     # data shape: n_samples x n_joints x n_features x n_frames
@@ -222,6 +211,7 @@ def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motion
     data = data * normalisation_data['std'] + normalisation_data['mean']
     for dynamic in dynamics:
         dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+        dynamic.sample_frames(sampled_frames)
 
     sampled_data = data[:n_sampled_motions][:, :, :, sampled_frames]
     sampled_data = to_list_4D(sampled_data)
@@ -234,30 +224,27 @@ def motion2fig(static: StaticData, data, height=512, width=512, n_sampled_motion
 
     edge_rots_dict, _, _ = edge_rot_dict_from_edge_motion_data(sampled_data, edge_rot_dict_general=sampled_edge_rot_dict_general)
 
-    one_anim, names = anim_from_edge_rot_dict(sampled_edge_rot_dict_general)
-    anim, names = anim_from_edge_rot_dict2(static, dynamic)
-    one_anim_shape = one_anim.shape
+    # one_anim, names = anim_from_edge_rot_dict(sampled_edge_rot_dict_general)
+    anim, names = anim_from_edge_rot_dict2(static, dynamics[0])
+    one_anim_shape = anim.shape
 
-    joints = np.zeros((n_sampled_motions, dynamics[0].n_frames, dynamic.n_joints, 3))
+    # joints = np.zeros((n_sampled_motions, dynamics[0].n_frames, dynamic.n_joints, 3))
+    joints = np.zeros((n_sampled_motions,) + one_anim_shape + (3,))  # TODO: Change
     for idx, (dynamic, one_edge_rot_dict) in enumerate(zip(dynamics, edge_rots_dict)):
         anim, _ = anim_from_edge_rot_dict(one_edge_rot_dict)
         anim2, _ = anim_from_edge_rot_dict2(static, dynamic)
         joints[idx] = Animation.positions_global(anim2)
 
+
+    figure_joints = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
+       'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
+       'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+    figure_indexes = [list(names).index(joint) for joint in figure_joints]
+
     # anim_joints_1_to_open_pose = [7, 6, 15, 16, 17, 10, 11, 12, 0, 23, 24, 25, 19, 20, 21]  # TODO: What is that??
-    # data = joints[:, :, anim_joints_1_to_open_pose, :]
-    data = joints
+
+    data = joints[:, :, figure_indexes, :]
     data = data.transpose(0, 2, 3, 1)  # samples x frames x joints x features ==> samples x joints x features x frames
-
-    # else:
-    #     data = data[sampled_motions][:, :, :, sampled_frames]
-
-    # data shape: n_samples x n_joints x n_frames x n_features
-
-    # use only 2 axes, part of the motions, and part of the frames within each motion
-    # if entity == 'Joint':
-    #     data = data[:, :, ::2, :] # use the xz projection
-    # else:
     data = data[:, :, :2, :]  # use the xy projection
 
     data = stretch(data, height, width)
