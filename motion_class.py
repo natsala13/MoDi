@@ -40,12 +40,19 @@
     -> motion2bvh
     -> motion2fig
 
+### BVH STRUCTURE
+* At bvh file, rotations are stored as the rotation of the joint itself.
+* In Modi, rotation is pre processed to be stored as the rotation of the joint the edge is pointing to.
+* At preprocessing, two new joints are added to every "central" joint (as Hips) so that different feet can move differently.
+* Before saving to BVH, we need to transfer rotation of joints to their parents one.
+* This feature of adding two more joints for every "central" one, is not working so good.
+
 *** QUESTIONS
--> for some reason parent list is edges indexes in edge list.
 * Why do we save real_motion in the start of the run?
 * What to do with mean and std?
-* Whats the use of enable foot contact? it adds edges to parent list.
-* Where are those conversions between array and tensor happening?
+* Why is offset_root set to be zeros?
+* Whats expand_topology_edges??
+* Why do we move rotations to parents edges in anim_from_rot_dict?
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
