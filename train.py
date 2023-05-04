@@ -44,6 +44,11 @@ try:
 except ImportError:
     LossRecorder = None
 
+
+ACCUMULATE_DECAY_FACTOR = 0.5 ** (32 / (10 * 1000))
+CALC_METRICES_EVERY = 2000
+
+
 def data_sampler(dataset, shuffle, distributed):
     if distributed:
         return data.distributed.DistributedSampler(dataset, shuffle=shuffle)
@@ -189,45 +194,39 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
           edge_rot_dict_general=None):
     loader = sample_data(loader)
 
-    pbar = range(args.iter)
-
+    pbar = range(args.start_iter, args.iter)
     if get_rank() == 0 and not args.on_cluster_training:
         pbar = tqdm(pbar, initial=args.start_iter, dynamic_ncols=False, smoothing=0.01, ncols=150)
 
     mean_path_length = 0
-
     d_loss_val = 0
-    r1_loss = torch.tensor(0.0, device=device)
     g_loss_val = 0
+    r1_loss = torch.tensor(0.0, device=device)
     foot_contact_loss = torch.tensor(0.0, device=device)
     path_loss = torch.tensor(0.0, device=device)
     path_lengths = torch.tensor(0.0, device=device)
     mean_path_length_avg = 0
     loss_dict = {}
+    g_module = generator.module if args.distributed else generator
+    d_module = discriminator.module if args.distributed else discriminator
 
-    if args.distributed:
-        g_module = generator.module
-        d_module = discriminator.module
+    normalisation_data = {'std': torch.tensor(edge_rot_dict_general['std']).cuda(),
+                          'mean': torch.tensor(edge_rot_dict_general['mean']).cuda(),
+                          'parents_with_root': edge_rot_dict_general['parents_with_root']}
 
-    else:
-        g_module = generator
-        d_module = discriminator
-
-    accum = 0.5 ** (32 / (10 * 1000))
-
-    report_every = args.report_every
     time_measure = []
     start_time_measure = time.time()
-    for idx in pbar:
-        i = idx + args.start_iter
+    for i in pbar:
+        # i = idx + args.start_iter
+        #
+        # if i > args.iter:
+        #     print("Done!")
+        #     break
 
-        if i > args.iter:
-            print("Done!")
-            break
-
-        real_img = next(loader)[0]  # joints x coords x frames
-        real_img = real_img.float() # loader produces doubles (64 bit), where network uses floats (32 bit)
-        real_img = real_img.transpose(1,2) #  joints x coords x frames  ==>   coords x joints x frames
+        # TODO: Change
+        real_img = next(loader)[0]   # joints x coords x frames
+        real_img = real_img.float()  # loader produces doubles (64 bit), where network uses floats (32 bit)
+        real_img = real_img.transpose(1, 2)  # joints x coords x frames  ==>   coords x joints x frames
         real_img = real_img.to(device)
 
         ######################
@@ -239,11 +238,10 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         noise = mixing_noise(args.batch, args.latent, args.mixing, device)
 
         fake_img, gt_latents, inject_index = generator(noise, return_latents=True)
-
         fake_pred = discriminator(fake_img)
         real_pred = discriminator(real_img)
-        d_loss = d_logistic_loss(real_pred, fake_pred)
 
+        d_loss = d_logistic_loss(real_pred, fake_pred)
         loss_dict["d"] = d_loss
         loss_dict["real_score"] = real_pred.mean()
         loss_dict["fake_score"] = fake_pred.mean()
@@ -252,9 +250,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         d_loss.backward()
         d_optim.step()
 
-        d_regularize = i % args.d_reg_every == 0
-
-        if d_regularize:
+        if i % args.d_reg_every == 0:
             real_img.requires_grad = True
             real_pred = discriminator(real_img)
             r1_loss = d_r1_loss(real_pred, real_img)
@@ -281,10 +277,6 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
 
         loss_dict["g"] = g_loss
 
-        normalisation_data = {'std': torch.tensor(edge_rot_dict_general['std']).cuda(),
-                              'mean': torch.tensor(edge_rot_dict_general['mean']).cuda(),
-                              'parents_with_root': edge_rot_dict_general['parents_with_root']}
-
         # foot contact loss
         if args.foot:
             if args.v2_contact_loss:
@@ -292,8 +284,8 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 foot_contact_loss = g_foot_contact_loss_v2(fake_img, static, normalisation_data, args.glob_pos, use_velocity)
             else:
                 foot_contact_loss = g_foot_contact_loss(fake_img, static, normalisation_data, args.glob_pos, args.axis_up)
-        loss_dict["foot_contact"] = foot_contact_loss
 
+        loss_dict["foot_contact"] = foot_contact_loss
         loss_dict["encourage_contact"] = g_encourage_contact(fake_img)
 
         generator.zero_grad()
@@ -328,13 +320,17 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         loss_dict["path"] = path_loss
         loss_dict["path_length"] = path_lengths.mean()
 
-        if i >= 2000 and i % 2000 == 0 and args.action_recog_model is not None:
+        ##################
+        ##################
+        ##################
+
+        if i >= CALC_METRICES_EVERY and i % CALC_METRICES_EVERY == 0 and args.action_recog_model is not None:
             fid, kid, g_diversity = calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints)
             loss_dict['evaluation_metrics_fid'] = fid
             loss_dict['evaluation_metrics_kid'] = kid
             loss_dict['evaluation_metrics_g_diversity'] = g_diversity
 
-        accumulate(g_ema, g_module, accum)
+        accumulate(g_ema, g_module, ACCUMULATE_DECAY_FACTOR)
 
         loss_reduced = reduce_loss_dict(loss_dict)
 
@@ -364,14 +360,17 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 print(f'[{i}/{args.iter}]', description_str)
 
             if args.clearml or args.tensorboard:
-                for loss_name, loss_val in zip(['Generator', 'Discriminator', 'R1', 'Path', 'Foot', 'Encourage contact'],
-                                               [g_loss_val, d_loss_val, r1_val, path_loss_val, foot_contact_loss_val, encourage_contact_loss_val]):
+                for loss_name, loss_val in zip(
+                        ['Generator', 'Discriminator', 'R1', 'Path', 'Foot', 'Encourage contact'],
+                        [g_loss_val, d_loss_val, r1_val, path_loss_val, foot_contact_loss_val,
+                         encourage_contact_loss_val]):
                     logger.report_scalar("Losses", loss_name, iteration=i, value=loss_val)
                 if args.action_recog_model is not None:
-                    for metric_name, metric_val in zip(['FID', 'KID', 'Diversity'], [fid_metric, kid_metric, g_diversity_metric]):
+                    for metric_name, metric_val in zip(['FID', 'KID', 'Diversity'],
+                                                       [fid_metric, kid_metric, g_diversity_metric]):
                         logger.report_scalar("Evaluation metrics", metric_name, iteration=i, value=metric_val)
 
-            if i == 0 or (i+1) % report_every == 0:
+            if i == 0 or (i + 1) % args.report_every == 0:
                 torch.save(
                     {
                         "g": g_module.state_dict(),
@@ -387,8 +386,8 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 )
                 fake_motion = fake_img.transpose(1, 2).detach().cpu().numpy()
                 normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
-                                      'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
-                                      'parents_with_root': edge_rot_dict_general['parents_with_root']}
+                                       'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
+                                       'parents_with_root': edge_rot_dict_general['parents_with_root']}
                 # TODO: Why do we need 2?
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
@@ -396,13 +395,10 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 motion2bvh_rot(fake_motion[0], motion_path, normalisation_data, static)
 
                 if args.clearml:
-                    logger.report_media(title='Animation', series='Predicted Motion', iteration=i, local_path=motion_path)
+                    logger.report_media(title='Animation', series='Predicted Motion', iteration=i,
+                                        local_path=motion_path)
 
                 fig = motion2fig(static, fake_motion, normalisation_data=normalisation_data2)
-
-                # fig = motion2fig_orig(fake_motion, entity='Edge',
-                #                     edge_rot_dict_general=edge_rot_dict_general)
-
 
                 fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
                 fig.savefig(fig_path, dpi=300, bbox_inches='tight')
@@ -415,10 +411,11 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     end_time_measure = time.time()
                     elapsed = end_time_measure - start_time_measure
                     time_measure.append(elapsed)
-                    print(f'\nTime of last {report_every} iterations: {int(elapsed)} seconds.')
+                    print(f'\nTime of last {args.report_every} iterations: {int(elapsed)} seconds.')
                     start_time_measure = time.time()
+
     mean_times = sum(time_measure)/len(time_measure)
-    print(f'\nAverage time for {report_every} iterations: {mean_times} seconds.')
+    print(f'\nAverage time for {args.report_every} iterations: {mean_times} seconds.')
 
 
 def calc_evaluation_metrics(args, device, g_ema, static, std_joints, mean_joints):

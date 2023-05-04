@@ -55,6 +55,8 @@
 * What does the class Dynamic should look like?
     * Holding a static?
     * Batch dimension?
+* How to use ClearML?
+* In save2bvh we keep asking is motion data a list, Why?
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
@@ -73,28 +75,29 @@
 [v] return offsets.
 [v] Create dynamic class.
 [X] Neighbors list
-[ ] Remove root position and foot contact.
+[X] Remove root position and foot contact.
 [ ] Dynamic class - use velocity flag
-[ ] Remove expand topology
+[X] Remove expand topology
 [ ] generate function exist both in generate and in evaluate.
-[ ] Stop woth default None values.
+[v] Stop with default None values.
 
-[ ] make training working using motion class.
+[v] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
-[ ] save bvh correctly?
+[v] save bvh correctly?
 [ ] make skeleton dist1 and dist0 pooling the same - its just mean/max pooling vs spatial pooling from same list.
 [ ] look up pre process edges - makes some preprocessing on all bvh data before using it.
-[ ] Maybe change the skeleton traits to hold a static object.
-[ ] names of feet are not the same for rvery topology...
+[?] Maybe change the skeleton traits to hold a static object.
+[ ] names of feet are not the same for every topology...
+[ ] Every time we load an image we convert it to float and transpose it - change it inside the loader itself.
 
 [ ] Reducing size of model - look up at 3d -> 2d convolutions in traits.
 
 PREPROCESSING
-[ ] list to specify wchich joint we are using out of all ones.
+[ ] list to specify which joint we are using out of all ones.
 
 NOTES
 * anim_from_edge_rot_dict apply extend joints on motion
-* expand joints is importnat otherwise we see some inconosistency at plotting
+* expand joints is important otherwise we see some inconsistency at plotting
 
 """
 import copy

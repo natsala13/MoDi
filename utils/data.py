@@ -506,7 +506,7 @@ def expand_topology_joints_openpose(one_motion_data, nearest_joint_ratio=0.9):
 
 
 def to_list_4D(motion_data):
-    if not isinstance(motion_data, list):
+    if not isinstance(motion_data, list):  # TODO: Why would it be a list?
         assert motion_data.ndim in [3, 4]
         if motion_data.ndim == 3:
             motion_data = motion_data[np.newaxis]

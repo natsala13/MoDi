@@ -17,6 +17,10 @@ from utils.data import to_list_4D, un_normalize
 from motion_class import StaticData, DynamicData, anim_from_static
 
 
+FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
+                 'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
+                 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+
 def pose2im_all(all_peaks, H=512, W=512):
     limbSeq = [[1, 2], [2, 3], [3, 4],                       # right arm
                [1, 5], [5, 6], [6, 7],                       # left arm
@@ -135,31 +139,14 @@ def motion2fig(static: StaticData, data,  normalisation_data,
         dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
         dynamic.sample_frames(sampled_frames)
 
-    # sampled_data = data[:n_sampled_motions][:, :, :, sampled_frames]
-    # sampled_data = to_list_4D(sampled_data)
-    #
-    # # edge_rot_dict_general = normalisation_data
-    # sampled_edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
-    # sampled_edge_rot_dict_general['rot_edge_no_root'] = sampled_edge_rot_dict_general['rot_edge_no_root'][sampled_frames]
-    # sampled_edge_rot_dict_general['pos_root'] = sampled_edge_rot_dict_general['pos_root'][sampled_frames]
-    # sampled_edge_rot_dict_general['rot_root'] = sampled_edge_rot_dict_general['rot_root'][sampled_frames]
-
-    # edge_rots_dict, _, _ = edge_rot_dict_from_edge_motion_data(sampled_data, edge_rot_dict_general=sampled_edge_rot_dict_general)
-
-    # one_anim, names = anim_from_edge_rot_dict(sampled_edge_rot_dict_general)
     anim, names = anim_from_static(static, dynamics[0])
-    one_anim_shape = anim.shape
 
-    # joints = np.zeros((n_sampled_motions, dynamics[0].n_frames, dynamic.n_joints, 3))
-    joints = np.zeros((n_sampled_motions,) + one_anim_shape + (3,))  # TODO: Change
+    joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))  # TODO: Change
     for idx, dynamic in enumerate(dynamics):
         anim, _ = anim_from_static(static, dynamic)
         joints[idx] = Animation.positions_global(anim)
 
-    figure_joints = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
-                     'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
-                     'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
-    figure_indexes = [list(names).index(joint) for joint in figure_joints]
+    figure_indexes = [list(names).index(joint) for joint in FIGURE_JOINTS]
 
     data = joints[:, :, figure_indexes, :2]  # b x T x J x 4
     data = data.transpose(0, 2, 3, 1)  # samples x frames x joints x features ==> samples x joints x features x frames
@@ -182,8 +169,8 @@ def motion2fig(static: StaticData, data,  normalisation_data,
                 pass # in some configurations the image cannot be shown
     return fig
 
-
-# def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint', normalisation_data=None, static=None):
+# def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
+# normalisation_data=None, static=None):
 #     assert entity in ['Joint', 'Edge']
 #     if entity == 'Joint':
 #         motion2bvh_loc(motion_data, bvh_file_path, parents, type)
@@ -195,23 +182,24 @@ def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
 
     if isinstance(motion_data, dict):
         # input is of type edge_rot_dict (e.g., read from GT file)
-        motion_data = [motion_data]
+        motion_data2 = [motion_data]
         frame_mults = [1]
         is_sub_motion = False
     else:
         # input is at the format of an output of the network
-        motion_data = to_list_4D(motion_data)  # add batch dimension and list dimention 1
-        motion_data = un_normalize(motion_data,
+        motion_data2 = to_list_4D(motion_data)  # add batch dimension and list dimention 1
+        motion_data2 = un_normalize(motion_data2,  # TODO: Try and remove that - receive DynamicData instead.
                                    mean=normalisation_data['mean'],
                                    std=normalisation_data['std'])
-        # edge_rot_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type=type,
-        #                                                                              edge_rot_dict_general=edge_rot_dict_general)
+        # What happends here, is given a 4d tensor (Batch, ...) we change it to a list of 4d tensors [(1, ...)] and normalise each.
 
-    # from this point input is a list of edge_rot_dicts
-    # for i, (edge_rot_dict, frame_mult) in enumerate(zip(edge_rot_dicts, frame_mults)):
-    for idx, motion in enumerate(motion_data):
-        # anim, names = anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips')
-        dynamic = DynamicData(motion[0], static)  # TODO: We need to normalise the motion as here.
+    import torch
+    motion_data = motion_data
+    assert torch.all(motion_data == motion_data2[0])
+
+    # for idx, motion in enumerate(motion_data):
+    for idx, motion in enumerate(motion_data2):
+        dynamic = DynamicData(motion[0], static)
         anim, names = anim_from_static(static, dynamic)
 
         # if is_sub_motion:  # TODO: What about a sub motion?
@@ -229,6 +217,7 @@ def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
 
         # if 'contact' in edge_rot_dict and edge_rot_dict['contact'] is not None:
         #     np.save(bvh_sub_file_path + '.contact.npy', edge_rot_dict['contact'])
+
 
 # old function to save figures from Joint model.
 def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):
@@ -266,7 +255,7 @@ def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):
         one_motion2bvh(motion_data, bvh_file_path, parents=parents[-1], is_openpose=True)
 
 
-def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names = None, expand = True):
+def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names=None, expand=True):
 
     # support non-skel-aware motions with 16 joints
     if one_motion_data.shape[0] == 16:
