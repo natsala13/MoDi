@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from utils.data import Edge, anim_from_edge_rot_dict, basic_anim_from_rot
-from motion_class import StaticData, DynamicData, anim_from_edge_rot_dict2, basic_anim_from_static
-from utils.visualization import motion2fig, motion2fig_orig
+from motion_class import StaticData, DynamicData, anim_from_static, basic_anim_from_static
+from utils.visualization import motion2fig
 
 
 FAKE_MOTION = 'debug/fig2img/fake_motion_399.npy'
@@ -81,31 +81,15 @@ def test_rotations(static, sampled_dynamic, metadata_processed, normalisation_da
 def test_anim_from_edge_rot(static, sampled_dynamic, metadata_processed, normalisation_data):
 
     anim, _ = anim_from_edge_rot_dict(metadata_processed)
-    anim_static, _ = anim_from_edge_rot_dict2(static, sampled_dynamic)
+    anim_static, _ = anim_from_static(static, sampled_dynamic)
 
     assert (anim.offsets == anim_static.offsets).all()
     assert (anim.rotations == anim_static.rotations).all()
     assert (anim.positions == anim_static.positions).all()
     assert (anim.orients == anim_static.orients).all()
 
-
 @pytest.mark.skip
-def test_generate_figure_original(motion, metadata):
-    fig = motion2fig_orig(motion, entity='Edge', edge_rot_dict_general=metadata)
+def test_generate_figure_static(static, motion, normalisation_data):
+    fig = motion2fig(static, motion, normalisation_data=normalisation_data)
     fig.savefig(SAVE_PATH, dpi=300, bbox_inches='tight')
     plt.close()
-
-
-@pytest.mark.skip
-def test_generate_figure_static(static, motion, normalisation_data, metadata):
-    fig = motion2fig(static, motion, normalisation_data=normalisation_data, edge_rot_dict_general=metadata)
-    fig.savefig(SAVE_PATH, dpi=300, bbox_inches='tight')
-    plt.close()
-
-
-@pytest.mark.skip
-def test_generate_figure_compare_both(static, motion, normalisation_data, metadata):
-    fig_orig = motion2fig_orig(motion, entity='Edge', edge_rot_dict_general=metadata)
-    fig = motion2fig(static, motion, normalisation_data=normalisation_data, edge_rot_dict_general=metadata)
-
-    import ipdb;ipdb.set_trace()

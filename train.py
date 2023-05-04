@@ -11,7 +11,7 @@ import torch.distributed as dist
 from torch.utils.data import TensorDataset
 from tqdm import tqdm
 
-from utils.visualization import motion2fig, motion2bvh_rot, motion2fig_orig
+from utils.visualization import motion2fig, motion2bvh_rot
 from utils.data import calc_bone_lengths
 from utils.traits import *
 from utils.data import foot_names
@@ -389,6 +389,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
                                       'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
                                       'parents_with_root': edge_rot_dict_general['parents_with_root']}
+                # TODO: Why do we need 2?
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
 
@@ -397,8 +398,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i, local_path=motion_path)
 
-                fig = motion2fig(static, fake_motion,
-                                 normalisation_data=normalisation_data2, edge_rot_dict_general=edge_rot_dict_general)
+                fig = motion2fig(static, fake_motion, normalisation_data=normalisation_data2)
 
                 # fig = motion2fig_orig(fake_motion, entity='Edge',
                 #                     edge_rot_dict_general=edge_rot_dict_general)

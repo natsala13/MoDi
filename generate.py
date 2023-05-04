@@ -223,8 +223,7 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
                               'parents_with_root': edge_rot_dict_general['parents_with_root']}
         fig = motion2fig(static, motion_np, normalisation_data,
                          n_sampled_motions=n_motions,
-                         n_sampled_frames=n_sampled_frames,
-                         edge_rot_dict_general=edge_rot_dict_general)
+                         n_sampled_frames=n_sampled_frames)
 
         prefix_no_underscore = prefix.replace('_', '')
         fig_name = osp.join(out_path, f'{prefix_no_underscore}.png')

@@ -49,17 +49,16 @@
 
 *** QUESTIONS
 * Why do we save real_motion in the start of the run?
-* What to do with mean and std?
 * Why is offset_root set to be zeros?
-* Whats expand_topology_edges??
-* Why do we move rotations to parents edges in anim_from_rot_dict?
-* Whats the use of enable foot contact? it adds edges to parent list.
 * Where are those conversions between array and tensor happening?
 * why do we sort joints? they are the same order as the input.
+* What does the class Dynamic should look like?
+    * Holding a static?
+    * Batch dimension?
 
 #### TODO:
 * Change preprocessing instead of saving that npy db, we want to save tensors.
-* The end goal is to train a model using my new construction letting generate a skeleton's model dynamically.
+* The end goal is to train a model using the new construction letting generate a skeleton's model dynamically.
 * Root location and feet position
     -> during pooling root position and feet contact remain (almost) independent
     -> during convolution both are neigbhoor of something,... to check.
@@ -622,7 +621,7 @@ def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
     return anim_edges
 
 
-def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
+def anim_from_static(static: StaticData, dynamic: DynamicData):
     anim_edges = basic_anim_from_static(static, dynamic)
 
     # TODO: Why do we need to sort names? isnt it already sorted correctly?
@@ -630,13 +629,10 @@ def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
     # anim_edges_sorted = anim_edges[:, sorted_order]
     # names_sorted = static.names['names_with_root'][sorted_order]
 
-    # expand joints TODO: REMOVE
+    # expand joints TODO: We dont need 2 methods
     anim_exp, _, names_exp, _ = expand_topology_edges2(anim_edges, names=static.names, nearest_joint_ratio=1)
 
-    # anim_exp = anim_edges
-    # names_exp = static.names
-
-    # move rotation values to parents
+    # move rotation values to parents because of the expendings.
     children_all_joints = children_list(anim_exp.parents)
     for idx, children_one_joint in enumerate(children_all_joints[1:]):
         parent_idx = idx + 1
@@ -648,5 +644,4 @@ def anim_from_edge_rot_dict2(static: StaticData, dynamic: DynamicData):
             anim_exp.rotations[:, parent_idx] = Quaternions.id((dynamic.n_frames))
 
     return anim_exp, names_exp
-    # return anim_edges, static.names
 
