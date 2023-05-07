@@ -456,15 +456,28 @@ class StaticData:
 
 class DynamicData:
     def __init__(self, motion: torch.tensor, static: StaticData):
-        self.motion = motion.transpose(2, 0, 1)  # Shape is T x J x K = frames x joints x channels
+        # self.motion = motion.transpose(2, 0, 1)  # Shape is T x J x K = frames x joints x channels
+        self.motion = motion.clone()  # Shape is B  x K x J x T = batch x channels x joints x frames
         self.static = static
 
-        if self.motion.shape[1] != len(static.parents_list[-1]) or self.motion.shape[2] != static.n_channels:
-            import ipdb;ipdb.set_trace()
-        # assert motion.shape[0] == len(static.parents_list[-1])
-        # assert motion.shape[1] == static.n_channels
+        # import ipdb;ipdb.set_trace()
+
+        assert motion.shape[-2] == len(static.parents_list[-1])
+        assert motion.shape[-3] == static.n_channels
+
+        foot_contact_joints = 2 if self.static.enable_foot_contact else 0
+        global_position_joint = 1 if self.static.enable_global_position else 0
+        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
 
         self.use_velocity = True
+
+    def assert_shape_is_right(self):
+        assert self.motion.shape[-2] == len(self.static.parents_list[-1])
+        assert self.motion.shape[-3] == self.static.n_channels
+
+        foot_contact_joints = 2 if self.static.enable_foot_contact else 0
+        global_position_joint = 1 if self.static.enable_global_position else 0
+        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str,
@@ -481,30 +494,36 @@ class DynamicData:
 
         return cls(animation.rotations.qs,static)
 
-    # @property
-    # def motion(self) -> torch.tensor:
-    #     raise NotImplementedError
+    def __iter__(self):
+        if self.motion.ndim == 4:
+            return self.motion.__iter__()
+        elif self.motion.ndim == 3:
+            return [self.motion].__iter__()
+
+    def __getitem__(self, slice):
+        # TODO: Maybe make sure that the slice doesnt cut out joints or channels?
+        return DynamicData(self.motion[slice], self.static)
+
+    @property
+    def shape(self):
+        return self.motion.shape
 
     @property
     def n_frames(self):
-        return self.motion.shape[0]  # TODO: Change...
+        return self.motion.shape[-1]  # TODO: Change...
 
     @property
     def n_channels(self):
-        return self.motion.shape[2]
+        return self.motion.shape[-3]
 
     @property
     def n_joints(self):
         return len(self.static.names)
-        # return self.motion.shape[1]
+        # return self.motion.shape[-2]
 
     @property
     def edge_rotations(self) -> torch.tensor:
-        foot_contact_joints = 2 if self.static.is_foot_contact_enabled() else 0
-        global_position_joint = 1 if self.static.is_global_position_enabled() else 0
-        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[1]
-
-        return self.motion[:, :self.n_joints, :]
+        return self.motion[..., :self.n_joints, :]  # Return only joints representing motion, maybe having a batch dim
 
     @property
     def foot_contact(self) -> torch.tensor:
@@ -512,7 +531,8 @@ class DynamicData:
 
     @property
     def root_location(self) -> torch.tensor:
-        location = self.motion[:, self.n_joints, :3]  # drop the 4th item in the position tensor
+        # batch x channels x joints x frames
+        location = self.motion[..., :3, self.n_joints, :]  # drop the 4th item in the position tensor
         location = np.cumsum(location, axis=0) if self.use_velocity else location
 
         return location
@@ -521,11 +541,11 @@ class DynamicData:
     # def static(self) -> StaticData:
     #     raise NotImplementedError
 
-    def normalise(self, mean: torch.tensor, std: torch.tensor):  # TODO: Implement somehow.
+    def normalise(self, mean: torch.tensor, std: torch.tensor):
         self.motion = self.motion * std + mean
 
     def sample_frames(self, frames_indexes: [int]):
-        self.motion = self.motion[frames_indexes, :, :]
+        self.motion = self.motion[..., frames_indexes]
 
 
 def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean=None, nearest_joint_ratio=0.9):
@@ -602,17 +622,20 @@ def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean
 
 
 def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
+    assert len(dynamic.shape) == 3
+
     offsets = static.offsets  # TODO: first row of root_offset is all zeros for some reason.
     offsets[0, :] = 0
     # assert (offsets == np.insert(edge_rot_dict2['offsets_no_root'], root_idx, edge_rot_dict2['offset_root'], axis=0)).all()
 
     positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
-    positions[:, 0] = dynamic.root_location
+
+    positions[:, 0] = dynamic.root_location.transpose()
     # positions[:, root_idx] = edge_rot_dict2['pos_root']  # TODO: Why do we do that?
 
     orients = Quaternions.id(dynamic.n_joints)
 
-    rotations = Quaternions(dynamic.edge_rotations)
+    rotations = Quaternions(dynamic.edge_rotations.transpose(2, 1, 0))
     # assert (rotations == Quaternions(np.insert(edge_rot_dict2['rot_edge_no_root'], root_idx, edge_rot_dict2['rot_root'], axis=1))).all()
 
     if rotations.shape[-1] == 6:  # repr6d

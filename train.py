@@ -211,8 +211,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
     d_module = discriminator.module if args.distributed else discriminator
 
     normalisation_data = {'std': torch.tensor(edge_rot_dict_general['std']).cuda(),
-                          'mean': torch.tensor(edge_rot_dict_general['mean']).cuda(),
-                          'parents_with_root': edge_rot_dict_general['parents_with_root']}
+                          'mean': torch.tensor(edge_rot_dict_general['mean']).cuda()}
 
     time_measure = []
     start_time_measure = time.time()
@@ -384,15 +383,21 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     },
                     osp.join(args.model_save_path, f"checkpoint/{str(i).zfill(6)}.pt")
                 )
-                fake_motion = fake_img.transpose(1, 2).detach().cpu().numpy()
-                normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
-                                       'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
-                                       'parents_with_root': edge_rot_dict_general['parents_with_root']}
-                # TODO: Why do we need 2?
+                print(f'fake_img shape - {fake_img.shape}, mean shape - {edge_rot_dict_general["std"].shape}')
+                # fake image shape - [16, 4, 23, 64] batch x features x joints x frames
+                # edge rot dict [mean] shape - [1, 4, 23, 1]
+                # mean joints shape - (1, 23, 4, 1)
+                dynamics = DynamicData(fake_img.detach().cpu().clone(), static)
+                dynamics.normalise(mean_joints, std_joints)
+
+                # fake_motion = fake_img.transpose(1, 2).detach().cpu()
+                # normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
+                #                        'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3)}
+                # TODO: Why do I need it on cpu?
 
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
 
-                motion2bvh_rot(fake_motion[0], motion_path, normalisation_data, static)
+                motion2bvh_rot(dynamics[0], motion_path, normalisation_data, static)
 
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i,

@@ -182,23 +182,27 @@ def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
 
     if isinstance(motion_data, dict):
         # input is of type edge_rot_dict (e.g., read from GT file)
-        motion_data2 = [motion_data]
+        motion_data = [motion_data]
         frame_mults = [1]
         is_sub_motion = False
     else:
         # input is at the format of an output of the network
-        motion_data2 = to_list_4D(motion_data)  # add batch dimension and list dimention 1
-        motion_data2 = un_normalize(motion_data2,  # TODO: Try and remove that - receive DynamicData instead.
+        motion_data = to_list_4D(motion_data.clone())  # add batch dimension and list dimention 1
+        motion_data = un_normalize(motion_data,  # TODO: Try and remove that - receive DynamicData instead.
                                    mean=normalisation_data['mean'],
                                    std=normalisation_data['std'])
         # What happends here, is given a 4d tensor (Batch, ...) we change it to a list of 4d tensors [(1, ...)] and normalise each.
 
     import torch
-    motion_data = motion_data
-    assert torch.all(motion_data == motion_data2[0])
+    # motion_data - (23, 4, 64)
+    # normalisation_data['std'] - torch.Size([1, 4, 23, 1])
+    # motion_data = motion_data * normalisation_data['std'] + normalisation_data['mean']
+    # assert (motion_data == motion_data2[0][0]).all()
+    # import ipdb;ipdb.set_trace()
+
 
     # for idx, motion in enumerate(motion_data):
-    for idx, motion in enumerate(motion_data2):
+    for idx, motion in enumerate(motion_data):
         dynamic = DynamicData(motion[0], static)
         anim, names = anim_from_static(static, dynamic)
 

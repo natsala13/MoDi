@@ -1,10 +1,11 @@
+import torch
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
 from utils.data import Edge, anim_from_edge_rot_dict, basic_anim_from_rot
 from motion_class import StaticData, DynamicData, anim_from_static, basic_anim_from_static
-from utils.visualization import motion2fig
+from utils.visualization import motion2fig, motion2bvh_rot
 
 
 FAKE_MOTION = 'debug/fig2img/fake_motion_399.npy'
@@ -12,6 +13,7 @@ FAKE_METADATA = 'debug/fig2img/fake_metaata_399.npy'
 FAKE_METADATA_PROCESSED = 'debug/fig2img/fake_metadata_after_process.npy'
 
 SAVE_PATH = 'debug/fig2img/out.png'
+BVH_PATH = 'debug/fig2img/out.bvh'
 DB_PATH = 'data/edge_rot_data.npy'
 
 
@@ -23,7 +25,7 @@ def config():
 
 @pytest.fixture(scope='session')
 def motion():
-    return np.load(FAKE_MOTION)
+    return torch.tensor(np.load(FAKE_MOTION))
 
 
 @pytest.fixture(scope='session')
@@ -51,20 +53,23 @@ def static():
 
 @pytest.fixture(scope='session')
 def dynamic(static, motion):
-    return DynamicData(motion[0], static)
+    return DynamicData(motion[0].permute(1, 0, 2), static)
 
 
 @pytest.fixture(scope='session')
 def normalisation_data(metadata):
-    return {'std': metadata['std'].transpose(0, 2, 1, 3),
-            'mean': metadata['mean'].transpose(0, 2, 1, 3),
+    return {'std': metadata['std'],
+            'mean': metadata['mean'],
             'parents_with_root': metadata['parents_with_root']}
+    # return {'std': metadata['std'].transpose(0, 2, 1, 3),
+    #         'mean': metadata['mean'].transpose(0, 2, 1, 3),
+    #         'parents_with_root': metadata['parents_with_root']}
 
 
 @pytest.fixture(scope='session')
 def sampled_dynamic(dynamic, normalisation_data):
     sampled_frames = np.linspace(0, dynamic.n_frames - 1, 5).round().astype(int)
-    dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+    dynamic.normalise(normalisation_data['mean'][:, :, :, 0].transpose(1,2,0), normalisation_data['std'][:, :, :, 0].transpose(1,2,0))
     dynamic.sample_frames(sampled_frames)
 
     return dynamic
@@ -78,18 +83,40 @@ def test_rotations(static, sampled_dynamic, metadata_processed, normalisation_da
     assert (rotations_dict == rotations_static).all()
 
 
+def test_dynamic_root_location(dynamic, static, motion, metadata_processed, normalisation_data):
+    dynamic2 = DynamicData(motion[0].permute(1, 0, 2), static)
+    sampled_frames = np.linspace(0, dynamic.n_frames - 1, 5).round().astype(int)
+    dynamic.normalise(normalisation_data['mean'][:, :, :, 0].transpose(1, 2, 0),
+                      normalisation_data['std'][:, :, :, 0].transpose(1, 2, 0))
+    dynamic.sample_frames(sampled_frames)
+
+    import ipdb;ipdb.set_trace()
+
+    assert sampled_dynamic.root_location == metadata_processed['pos_root'].transpose()
+
+
 def test_anim_from_edge_rot(static, sampled_dynamic, metadata_processed, normalisation_data):
 
-    anim, _ = anim_from_edge_rot_dict(metadata_processed)
-    anim_static, _ = anim_from_static(static, sampled_dynamic)
+    # anim, _ = anim_from_edge_rot_dict(metadata_processed)
+    # anim_static, _ = anim_from_static(static, sampled_dynamic)
+
+    anim = basic_anim_from_rot(metadata_processed, 'Hips')
+    anim_static = basic_anim_from_static(static, sampled_dynamic)
+
+    import ipdb;ipdb.set_trace()
 
     assert (anim.offsets == anim_static.offsets).all()
     assert (anim.rotations == anim_static.rotations).all()
     assert (anim.positions == anim_static.positions).all()
     assert (anim.orients == anim_static.orients).all()
 
+
 @pytest.mark.skip
 def test_generate_figure_static(static, motion, normalisation_data):
     fig = motion2fig(static, motion, normalisation_data=normalisation_data)
     fig.savefig(SAVE_PATH, dpi=300, bbox_inches='tight')
     plt.close()
+
+
+def test_save_bvh(static, dynamic, motion, normalisation_data):
+    motion2bvh_rot(torch.tensor(motion[0].transpose(1,0,2)), BVH_PATH, normalisation_data, static)
