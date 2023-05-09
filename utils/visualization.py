@@ -123,22 +123,23 @@ def motion2fig_1_motion_3_angles(data, H=512, W=512):
     return fig
 
 
-def motion2fig(static: StaticData, data,  normalisation_data,
+def motion2fig(static: StaticData, dynamics: DynamicData,  normalisation_data,
                height=512, width=512, n_sampled_motions=5, n_sampled_frames=5):
 
-    dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
+    # dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
 
-    n_sampled_motions = min(n_sampled_motions, data.shape[0], 10)
-    sampled_frames = np.linspace(0, dynamics[0].n_frames-1, n_sampled_frames).round().astype(int)
+    n_sampled_motions = min(n_sampled_motions, dynamics.n_frames, 10)
+    sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
+    #
+    # # data shape: n_samples x n_joints x n_features x n_frames
+    # assert not isinstance(data, list) and not isinstance(data[0], dict)
+    #
+    # data = data * normalisation_data['std'] + normalisation_data['mean']  # TODO: looks like a quicker way to normalise a batch of samples.
+    # for dynamic in dynamics:
+    #     dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+    #     dynamic.sample_frames(sampled_frames)
 
-    # data shape: n_samples x n_joints x n_features x n_frames
-    assert not isinstance(data, list) and not isinstance(data[0], dict)
-
-    data = data * normalisation_data['std'] + normalisation_data['mean']  # TODO: looks like a quicker way to normalise a batch of samples.
-    for dynamic in dynamics:
-        dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
-        dynamic.sample_frames(sampled_frames)
-
+    dynamics.sample_frames(sampled_frames)
     anim, names = anim_from_static(static, dynamics[0])
 
     joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))  # TODO: Change
@@ -178,32 +179,22 @@ def motion2fig(static: StaticData, data,  normalisation_data,
 #     motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
-def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
-
-    if isinstance(motion_data, dict):
-        # input is of type edge_rot_dict (e.g., read from GT file)
-        motion_data = [motion_data]
-        frame_mults = [1]
-        is_sub_motion = False
-    else:
-        # input is at the format of an output of the network
-        motion_data = to_list_4D(motion_data.clone())  # add batch dimension and list dimention 1
-        motion_data = un_normalize(motion_data,  # TODO: Try and remove that - receive DynamicData instead.
-                                   mean=normalisation_data['mean'],
-                                   std=normalisation_data['std'])
-        # What happends here, is given a 4d tensor (Batch, ...) we change it to a list of 4d tensors [(1, ...)] and normalise each.
-
-    import torch
-    # motion_data - (23, 4, 64)
-    # normalisation_data['std'] - torch.Size([1, 4, 23, 1])
-    # motion_data = motion_data * normalisation_data['std'] + normalisation_data['mean']
-    # assert (motion_data == motion_data2[0][0]).all()
-    # import ipdb;ipdb.set_trace()
+def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static: StaticData, dynamics: DynamicData):
+    # if isinstance(motion_data, dict):
+    #     # input is of type edge_rot_dict (e.g., read from GT file)
+    #     motion_data2 = [motion_data]
+    #     frame_mults = [1]
+    #     is_sub_motion = False
+    # else:
+    #     # input is at the format of an output of the network
+    #     motion_data2 = to_list_4D(motion_data.copy())  # add batch dimension and list dimention 1
+    #     motion_data2 = un_normalize(motion_data2, mean=normalisation_data['mean'], std=normalisation_data['std'])
+    #     # What happends here, is given a 4d tensor (Batch, ...) we change it to a list of 4d tensors [(1, ...)] and normalise each.
 
 
     # for idx, motion in enumerate(motion_data):
-    for idx, motion in enumerate(motion_data):
-        dynamic = DynamicData(motion[0], static)
+    for idx, dynamic in enumerate(dynamics):
+        # dynamic = DynamicData(motion[0], static)
         anim, names = anim_from_static(static, dynamic)
 
         # if is_sub_motion:  # TODO: What about a sub motion?

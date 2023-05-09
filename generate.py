@@ -1,15 +1,17 @@
-import os.path as osp
 import os
-import datetime
 import re
-import pandas as pd
+import datetime
+import os.path as osp
 
 import torch
-import numpy as np
-from utils.visualization import motion2fig, motion2bvh_rot
-import matplotlib.pyplot as plt
 import sys as _sys
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 from utils.data import motion_from_raw, to_cpu
+from motion_class import DynamicData, StaticData
+from utils.visualization import motion2fig, motion2bvh_rot
 from utils.pre_run import GenerateOptions, load_all_form_checkpoint
 from utils.data import Joint, Edge # to be used in 'eval'
 

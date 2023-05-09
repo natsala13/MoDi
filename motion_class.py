@@ -48,13 +48,11 @@
 * This feature of adding two more joints for every "central" one, is not working so good.
 
 *** QUESTIONS
-* Why do we save real_motion in the start of the run?
-* Why is offset_root set to be zeros?
-* Where are those conversions between array and tensor happening?
+** What is data un normalise? what happem if shape is not equal? should we not normalise the data?
 * why do we sort joints? they are the same order as the input.
 * What does the class Dynamic should look like?
     * Holding a static?
-    * Batch dimension?
+    * Batch dimension? YES
 * How to use ClearML?
 * In save2bvh we keep asking is motion data a list, Why?
 
@@ -460,14 +458,7 @@ class DynamicData:
         self.motion = motion.clone()  # Shape is B  x K x J x T = batch x channels x joints x frames
         self.static = static
 
-        # import ipdb;ipdb.set_trace()
-
-        assert motion.shape[-2] == len(static.parents_list[-1])
-        assert motion.shape[-3] == static.n_channels
-
-        foot_contact_joints = 2 if self.static.enable_foot_contact else 0
-        global_position_joint = 1 if self.static.enable_global_position else 0
-        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
+        self.assert_shape_is_right()
 
         self.use_velocity = True
 
@@ -496,9 +487,9 @@ class DynamicData:
 
     def __iter__(self):
         if self.motion.ndim == 4:
-            return self.motion.__iter__()
+            return (DynamicData(motion, self.static) for motion in self.motion).__iter__()
         elif self.motion.ndim == 3:
-            return [self.motion].__iter__()
+            return [DynamicData(self.motion, self.static)].__iter__()
 
     def __getitem__(self, slice):
         # TODO: Maybe make sure that the slice doesnt cut out joints or channels?
@@ -510,7 +501,7 @@ class DynamicData:
 
     @property
     def n_frames(self):
-        return self.motion.shape[-1]  # TODO: Change...
+        return self.motion.shape[-1]
 
     @property
     def n_channels(self):
@@ -523,23 +514,20 @@ class DynamicData:
 
     @property
     def edge_rotations(self) -> torch.tensor:
-        return self.motion[..., :self.n_joints, :]  # Return only joints representing motion, maybe having a batch dim
+        return self.motion[..., :self.n_joints, :]
+        # Return only joints representing motion, maybe having a batch dim
 
     @property
     def foot_contact(self) -> torch.tensor:
         raise NotImplementedError
 
     @property
-    def root_location(self) -> torch.tensor:
+    def root_location(self) -> torch.tensor:  # TODO: Will this work with batch dim?
         # batch x channels x joints x frames
         location = self.motion[..., :3, self.n_joints, :]  # drop the 4th item in the position tensor
-        location = np.cumsum(location, axis=0) if self.use_velocity else location
+        location = np.cumsum(location, axis=1) if self.use_velocity else location
 
-        return location
-
-    # @property
-    # def static(self) -> StaticData:
-    #     raise NotImplementedError
+        return location  # K x T
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
         self.motion = self.motion * std + mean
@@ -622,20 +610,17 @@ def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean
 
 
 def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
-    assert len(dynamic.shape) == 3
-
     offsets = static.offsets  # TODO: first row of root_offset is all zeros for some reason.
     offsets[0, :] = 0
     # assert (offsets == np.insert(edge_rot_dict2['offsets_no_root'], root_idx, edge_rot_dict2['offset_root'], axis=0)).all()
 
     positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
-
-    positions[:, 0] = dynamic.root_location.transpose()
+    positions[:, 0] = dynamic.root_location.transpose(0, 1)
     # positions[:, root_idx] = edge_rot_dict2['pos_root']  # TODO: Why do we do that?
 
     orients = Quaternions.id(dynamic.n_joints)
 
-    rotations = Quaternions(dynamic.edge_rotations.transpose(2, 1, 0))
+    rotations = Quaternions(dynamic.edge_rotations.permute(2, 1, 0).numpy())
     # assert (rotations == Quaternions(np.insert(edge_rot_dict2['rot_edge_no_root'], root_idx, edge_rot_dict2['rot_root'], axis=1))).all()
 
     if rotations.shape[-1] == 6:  # repr6d

@@ -191,7 +191,7 @@ def set_grad_none(model, targets):
 
 def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static: StaticData,
           animations_output_folder, images_output_folder, mean_joints=None, std_joints=None, gt_bone_lengths=None,
-          edge_rot_dict_general=None):
+          edge_rot_dict_general=None, use_velocity=False):
     loader = sample_data(loader)
 
     pbar = range(args.start_iter, args.iter)
@@ -210,8 +210,8 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
     g_module = generator.module if args.distributed else generator
     d_module = discriminator.module if args.distributed else discriminator
 
-    normalisation_data = {'std': torch.tensor(edge_rot_dict_general['std']).cuda(),
-                          'mean': torch.tensor(edge_rot_dict_general['mean']).cuda()}
+    normalisation_data = {'std': torch.tensor(std_joints.transpose(0, 2, 1, 3)).cuda(),
+                          'mean': torch.tensor(mean_joints.transpose(0, 2, 1, 3)).cuda()}
 
     time_measure = []
     start_time_measure = time.time()
@@ -279,7 +279,6 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
         # foot contact loss
         if args.foot:
             if args.v2_contact_loss:
-                use_velocity = 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
                 foot_contact_loss = g_foot_contact_loss_v2(fake_img, static, normalisation_data, args.glob_pos, use_velocity)
             else:
                 foot_contact_loss = g_foot_contact_loss(fake_img, static, normalisation_data, args.glob_pos, args.axis_up)
@@ -383,27 +382,19 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     },
                     osp.join(args.model_save_path, f"checkpoint/{str(i).zfill(6)}.pt")
                 )
-                print(f'fake_img shape - {fake_img.shape}, mean shape - {edge_rot_dict_general["std"].shape}')
-                # fake image shape - [16, 4, 23, 64] batch x features x joints x frames
+                # fake image shape - [16, 4, 23, 64] batch x features x joints x frames - B x K x J x T
                 # edge rot dict [mean] shape - [1, 4, 23, 1]
                 # mean joints shape - (1, 23, 4, 1)
-                dynamics = DynamicData(fake_img.detach().cpu().clone(), static)
-                dynamics.normalise(mean_joints, std_joints)
-
-                # fake_motion = fake_img.transpose(1, 2).detach().cpu()
-                # normalisation_data2 = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
-                #                        'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3)}
-                # TODO: Why do I need it on cpu?
-
                 motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
-
-                motion2bvh_rot(dynamics[0], motion_path, normalisation_data, static)
-
                 if args.clearml:
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i,
                                         local_path=motion_path)
 
-                fig = motion2fig(static, fake_motion, normalisation_data=normalisation_data2)
+                dynamics = DynamicData(fake_img.detach().cpu(), static)
+                dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
+
+                motion2bvh_rot(None, motion_path, None, static, dynamics[0])
+                fig = motion2fig(static, dynamics[:5], normalisation_data=None)
 
                 fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
                 fig.savefig(fig_path, dpi=300, bbox_inches='tight')
@@ -593,8 +584,11 @@ def main(args_not_parsed):
         drop_last=True,
     )
 
+    use_velocity = 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
     train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static,
-          animations_output_folder, images_output_folder, mean_joints, std_joints, gt_bone_lengths, edge_rot_dict_general)
+          animations_output_folder, images_output_folder, mean_joints, std_joints, gt_bone_lengths,
+          edge_rot_dict_general, use_velocity)
+
 
 
 if __name__ == "__main__":
