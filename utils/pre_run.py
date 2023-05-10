@@ -261,7 +261,6 @@ def setup_env(args, get_traits=False):
             elif args.conv3:
                 traits_class = SkeletonAwareConv3DTraits
             elif args.fast:
-                print(f'Using fast convolution')
                 traits_class = SkeletonAwareFastConvTraits
             else:
                 raise 'Traits cannot be selected.'

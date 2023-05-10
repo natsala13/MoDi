@@ -123,21 +123,11 @@ def motion2fig_1_motion_3_angles(data, H=512, W=512):
     return fig
 
 
-def motion2fig(static: StaticData, data,  normalisation_data,
+def motion2fig(static: StaticData, dynamics: DynamicData,
                height=512, width=512, n_sampled_motions=5, n_sampled_frames=5):
-
-    dynamics = [DynamicData(motion, static) for motion in data[:n_sampled_motions]]
-
-    n_sampled_motions = min(n_sampled_motions, data.shape[0], 10)
-    sampled_frames = np.linspace(0, dynamics[0].n_frames-1, n_sampled_frames).round().astype(int)
-
-    # data shape: n_samples x n_joints x n_features x n_frames
-    assert not isinstance(data, list) and not isinstance(data[0], dict)
-
-    data = data * normalisation_data['std'] + normalisation_data['mean']  # TODO: looks like a quicker way to normalise a batch of samples.
-    for dynamic in dynamics:
-        dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
-        dynamic.sample_frames(sampled_frames)
+    n_sampled_motions = min(n_sampled_motions, dynamics.n_frames, 10)
+    sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
+    dynamics.sample_frames(sampled_frames)
 
     anim, names = anim_from_static(static, dynamics[0])
 
@@ -148,25 +138,24 @@ def motion2fig(static: StaticData, data,  normalisation_data,
 
     figure_indexes = [list(names).index(joint) for joint in FIGURE_JOINTS]
 
-    data = joints[:, :, figure_indexes, :2]  # b x T x J x 4
+    data = joints[..., figure_indexes, :2]  # b x T x J x 4 -> acesss only the xy projection from K
     data = data.transpose(0, 2, 3, 1)  # samples x frames x joints x features ==> samples x joints x features x frames
-    # data = data[:, :, :2, :]  # use the xy projection
 
     data = stretch(data, height, width)
 
     fig, axes = plt.subplots(n_sampled_motions, n_sampled_frames)
     if axes.ndim == 1:  # if there is only one motion
         axes = axes[np.newaxis, :]
-    max_w, max_h = np.ceil(data.max(axis=(0,1,3))).astype(int)
+    max_w, max_h = np.ceil(data.max(axis=(0, 1, 3))).astype(int)
     for motion_idx in np.arange(n_sampled_motions):
         for frame_idx in np.arange(n_sampled_frames):
-            skeleton = data[motion_idx,:,:,frame_idx]
+            skeleton = data[motion_idx, :, :, frame_idx]
             img = pose2im_all(skeleton, max_h, max_w)
             axes[motion_idx, frame_idx].axis('off')
             try:
-                axes[motion_idx, frame_idx].imshow(img[::-1,:]) # image y axis is inverted
+                axes[motion_idx, frame_idx].imshow(img[::-1, :])  # image y axis is inverted
             except:
-                pass # in some configurations the image cannot be shown
+                pass  # in some configurations the image cannot be shown
     return fig
 
 # def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
@@ -178,28 +167,9 @@ def motion2fig(static: StaticData, data,  normalisation_data,
 #     motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
-def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
+def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
 
-    if isinstance(motion_data, dict):
-        # input is of type edge_rot_dict (e.g., read from GT file)
-        motion_data2 = [motion_data]
-        frame_mults = [1]
-        is_sub_motion = False
-    else:
-        # input is at the format of an output of the network
-        motion_data2 = to_list_4D(motion_data)  # add batch dimension and list dimention 1
-        motion_data2 = un_normalize(motion_data2,  # TODO: Try and remove that - receive DynamicData instead.
-                                   mean=normalisation_data['mean'],
-                                   std=normalisation_data['std'])
-        # What happends here, is given a 4d tensor (Batch, ...) we change it to a list of 4d tensors [(1, ...)] and normalise each.
-
-    import torch
-    motion_data = motion_data
-    assert torch.all(motion_data == motion_data2[0])
-
-    # for idx, motion in enumerate(motion_data):
-    for idx, motion in enumerate(motion_data2):
-        dynamic = DynamicData(motion[0], static)
+    for idx, dynamic in enumerate(dynamics):
         anim, names = anim_from_static(static, dynamic)
 
         # if is_sub_motion:  # TODO: What about a sub motion?
@@ -212,7 +182,6 @@ def motion2bvh_rot(motion_data, bvh_file_path, normalisation_data, static):
 
         bvh_file_dir = osp.split(bvh_file_path)[0]
         os.makedirs(bvh_file_dir, exist_ok=True)
-
         BVH.save(bvh_file_path, anim, names)
 
         # if 'contact' in edge_rot_dict and edge_rot_dict['contact'] is not None:

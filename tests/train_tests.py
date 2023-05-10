@@ -1,9 +1,10 @@
+import torch
 import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
-from utils.data import Edge, anim_from_edge_rot_dict, basic_anim_from_rot
-from motion_class import StaticData, DynamicData, anim_from_static, basic_anim_from_static
+from utils.data import Edge, anim_from_edge_rot_dict
+from motion_class import StaticData, DynamicData, anim_from_static
 from utils.visualization import motion2fig
 
 
@@ -12,6 +13,7 @@ FAKE_METADATA = 'debug/fig2img/fake_metaata_399.npy'
 FAKE_METADATA_PROCESSED = 'debug/fig2img/fake_metadata_after_process.npy'
 
 SAVE_PATH = 'debug/fig2img/out.png'
+BVH_PATH = 'debug/fig2img/out.bvh'
 DB_PATH = 'data/edge_rot_data.npy'
 
 
@@ -23,7 +25,7 @@ def config():
 
 @pytest.fixture(scope='session')
 def motion():
-    return np.load(FAKE_MOTION)
+    return torch.tensor(np.load(FAKE_MOTION))
 
 
 @pytest.fixture(scope='session')
@@ -51,13 +53,14 @@ def static():
 
 @pytest.fixture(scope='session')
 def dynamic(static, motion):
-    return DynamicData(motion[0], static)
+    return DynamicData(motion[0].permute(1, 0, 2), static)
 
 
 @pytest.fixture(scope='session')
 def normalisation_data(metadata):
-    return {'std': metadata['std'].transpose(0, 2, 1, 3),
-            'mean': metadata['mean'].transpose(0, 2, 1, 3),
+    import ipdb;ipdb.set_trace()
+    return {'std': metadata['std'].transpose(1, 2, 0, 3),
+            'mean': metadata['mean'].transpose(1, 2, 0, 3),
             'parents_with_root': metadata['parents_with_root']}
 
 
@@ -72,10 +75,14 @@ def sampled_dynamic(dynamic, normalisation_data):
 
 def test_rotations(static, sampled_dynamic, metadata_processed, normalisation_data):
     rotations_dict = np.insert(metadata_processed['rot_edge_no_root'], 0, metadata_processed['rot_root'], axis=1)
-    rotations_static = sampled_dynamic.edge_rotations
+    rotations_static = sampled_dynamic.edge_rotations.permute(2, 1, 0)
 
     assert rotations_dict.shape == rotations_static.shape
     assert (rotations_dict == rotations_static).all()
+
+
+def test_root_location(sampled_dynamic, metadata_processed):
+    assert (sampled_dynamic.root_location.transpose(0, 1).numpy() == metadata_processed['pos_root']).all()
 
 
 def test_anim_from_edge_rot(static, sampled_dynamic, metadata_processed, normalisation_data):
@@ -87,6 +94,7 @@ def test_anim_from_edge_rot(static, sampled_dynamic, metadata_processed, normali
     assert (anim.rotations == anim_static.rotations).all()
     assert (anim.positions == anim_static.positions).all()
     assert (anim.orients == anim_static.orients).all()
+
 
 @pytest.mark.skip
 def test_generate_figure_static(static, motion, normalisation_data):

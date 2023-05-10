@@ -743,6 +743,7 @@ def motion_from_raw(args, motion_data_raw):
         if args.normalize:
             mean_joints = motion_data.mean(axis=(0, 3))
             mean_joints = mean_joints[np.newaxis, :, :, np.newaxis]
+            
             std_joints = motion_data.std(axis=(0, 3))
             std_joints = std_joints[np.newaxis, :, :, np.newaxis]
             std_joints[np.where(std_joints < 1e-9)] = 1e-9

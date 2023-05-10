@@ -12,12 +12,7 @@ def get_foot_location(motion_data: torch.tensor, static: StaticData, normalisati
 
     n_motions, _, _, n_frames = motion_data.shape
     data_dtype = motion_data.dtype
-    # compute joint locations
-    root_idx = 0
 
-    # print(f'static parents - {static.parents}')
-    # print(f'edge rot parents - {normalisation_data["parents_with_root"]}')
-    assert all(static.parents == normalisation_data['parents_with_root'])
     # fk class must have root at index 0  TODO: Its kinda default...
     offsets = np.repeat(static.offsets[np.newaxis], n_motions, axis=0)
     offsets = torch.from_numpy(offsets).to(motion_data.device).type(data_dtype)
