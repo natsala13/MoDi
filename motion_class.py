@@ -131,15 +131,15 @@ class StaticData:
         self.offsets = offsets
         self.names = names
 
-        self.parents_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)  # TODO: Make cached properties.
+        self.parents_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)
         self.skeletal_pooling_dist_1 = [{edge[1]: [e[1] for e in pooling[edge]] for edge in pooling}
                                         for pooling in self.skeletal_pooling_dist_1_edges]
 
         self.skeletal_pooling_dist_0 = [{edge[1]: [pooling[edge][-1][1]] for edge in pooling}
                                         for pooling in self.skeletal_pooling_dist_1_edges]
 
-        self.skeletal_pooling_dist_0_edges = None
-        self.edges_list = None  # TODO: I dont think I need those 2 varianles anymore...
+        # self.skeletal_pooling_dist_0_edges = None
+        # self.edges_list = None  # TODO: I dont think I need those 2 varianles anymore...
 
         # Configurations
         self.__n_channels = n_channels
@@ -166,10 +166,6 @@ class StaticData:
     @property
     def parents(self):
         return self.parents_list[-1][:len(self.names)]
-
-    # @property
-    # def offsets(self) -> np.ndarray:  # TODO: Should I add also the global position?
-    #     raise NotImplementedError
 
     @property
     def entire_motion(self) -> np.ndarray:
@@ -283,8 +279,6 @@ class StaticData:
 
         all_leaves_pool = []
         connected_leaves = []
-        # if joints_degree[index] > 1 and index != 0:
-        #     all_sequences = [[index]]
 
         children_list = [dst for dst, src in enumerate(parents) if src == index]
 
@@ -299,7 +293,6 @@ class StaticData:
             all_leaves_pool += [[index] + connected_leaves]
 
         return all_leaves_pool
-
 
     @staticmethod
     def _edges_from_joints(joints: [int]):
@@ -345,7 +338,6 @@ class StaticData:
             pooling[joint] = [edge[0] for edge in edges_sequences if edge[0][0] == joint]
 
         return {pooling[k][0]: pooling[k] for k in pooling}
-
 
     @staticmethod
     def _calculate_pooling_for_level(parents: [int], degree: [int]) -> {EdgePoint: [EdgePoint]}:
@@ -454,7 +446,6 @@ class StaticData:
 
 class DynamicData:
     def __init__(self, motion: torch.tensor, static: StaticData):
-        # self.motion = motion.transpose(2, 0, 1)  # Shape is T x J x K = frames x joints x channels
         self.motion = motion.clone()  # Shape is B  x K x J x T = batch x channels x joints x frames
         self.static = static
 
@@ -491,9 +482,9 @@ class DynamicData:
         elif self.motion.ndim == 3:
             return [DynamicData(self.motion, self.static)].__iter__()
 
-    def __getitem__(self, slice):
+    def __getitem__(self, slice_val):
         # TODO: Maybe make sure that the slice doesnt cut out joints or channels?
-        return DynamicData(self.motion[slice], self.static)
+        return DynamicData(self.motion[slice_val], self.static)
 
     @property
     def shape(self):
@@ -510,7 +501,6 @@ class DynamicData:
     @property
     def n_joints(self):
         return len(self.static.names)
-        # return self.motion.shape[-2]
 
     @property
     def edge_rotations(self) -> torch.tensor:
@@ -522,8 +512,7 @@ class DynamicData:
         raise NotImplementedError
 
     @property
-    def root_location(self) -> torch.tensor:  # TODO: Will this work with batch dim?
-        # batch x channels x joints x frames
+    def root_location(self) -> torch.tensor:
         location = self.motion[..., :3, self.n_joints, :]  # drop the 4th item in the position tensor
         location = np.cumsum(location, axis=1) if self.use_velocity else location
 
@@ -610,18 +599,15 @@ def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean
 
 
 def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
-    offsets = static.offsets  # TODO: first row of root_offset is all zeros for some reason.
+    offsets = static.offsets
     offsets[0, :] = 0
-    # assert (offsets == np.insert(edge_rot_dict2['offsets_no_root'], root_idx, edge_rot_dict2['offset_root'], axis=0)).all()
 
     positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
     positions[:, 0] = dynamic.root_location.transpose(0, 1)
-    # positions[:, root_idx] = edge_rot_dict2['pos_root']  # TODO: Why do we do that?
 
     orients = Quaternions.id(dynamic.n_joints)
 
     rotations = Quaternions(dynamic.edge_rotations.permute(2, 1, 0).numpy())
-    # assert (rotations == Quaternions(np.insert(edge_rot_dict2['rot_edge_no_root'], root_idx, edge_rot_dict2['rot_root'], axis=1))).all()
 
     if rotations.shape[-1] == 6:  # repr6d
         from Motion.transforms import repr6d2quat
