@@ -390,7 +390,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                                        'parents_with_root': edge_rot_dict_general['parents_with_root']}
                 # TODO: Why do we need 2?
 
-                motion_path = osp.join(animations_output_folder, 'fake_motion_{}.bvh'.format(i))
+                motion_path = osp.join(animations_output_folder, f'fake_motion_{str(i).zfill(6)}.bvh')
 
                 motion2bvh_rot(fake_motion[0], motion_path, normalisation_data, static)
 
