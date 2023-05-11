@@ -20,13 +20,7 @@ REQUESTED_JOINT_NAMES_1 = ['Head', 'Neck', 'Spine', 'Spine1',
                            'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
                            'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot',
                           ]
-# joints like in openpose
-REQUESTED_JOINT_NAMES_2 = ['Head', 'Neck', #'Spine', 'Spine1',
-                           #'Spine2', 'RightShoulder',
-                           'RightArm', 'RightForeArm', 'RightHand',
-                           'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-                           'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot',
-                          ]
+
 
 
 def fix_joint_names(char, names):
@@ -46,10 +40,11 @@ def clean(dir_list, dir):
     remove = []
     for f_name in dir_list:
         if not osp.isdir(osp.join(dir, f_name)):
-            remove.append(f_name) # cannot actually remove while iterating the list, because it confuses the iteration
+            remove.append(f_name)  # cannot actually remove while iterating the list, because it confuses the iteration
     for r in remove:
         dir_list.remove(r)
     return dir_list
+
 
 def dilute_joints_anim(anim, req_joint_idx, offset_len_mean):
     # we do not want to change inputs that are given as views
