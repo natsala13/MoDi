@@ -7,9 +7,10 @@ import os.path as osp
 
 import bpy
 
+#'/Users/nathansala/tau/code/MoDi/dataset/mau'
 in_dir = '<fbx folder>'  #  example: '/home/username/data/mixamo/fbx/binaries_30_fps'
 out_dir = in_dir.replace('fbx', 'bvh')
-fbx_files = glob(osp.join(in_dir, '*', '*.fbx'))
+fbx_files = os.listdir(out_dir)  # glob(osp.join(in_dir, '*', '*.fbx'))
 for idx, in_file in enumerate(fbx_files):
 
     in_file_no_path = osp.split(in_file)[1]
@@ -25,13 +26,13 @@ for idx, in_file in enumerate(fbx_files):
 
     os.makedirs(osp.join(out_dir, rel_dir), exist_ok=True)
 
-    bpy.ops.import_scene.fbx(filepath=in_file)
+    bpy.ops.import_scene.fbx(filepath=osp.join(out_dir, in_file))
 
     action = bpy.data.actions[-1]
     assert action.frame_range[0] < 9999 and action.frame_range[1] > -9999  # checking because of Kfir's code
     bpy.ops.export_anim.bvh(filepath=out_file,
-                            frame_start=action.frame_range[0],
-                            frame_end=action.frame_range[1], root_transform_only=True)
+                            frame_start=int(action.frame_range[0]),
+                            frame_end=int(action.frame_range[1]), root_transform_only=True)
     bpy.data.actions.remove(bpy.data.actions[-1])
 
     print('{} processed. #{} of {}'.format(out_file, idx, len(fbx_files)))

@@ -397,11 +397,12 @@ def expand_topology_edges(anim, req_joint_idx=None, names=None, offset_len_mean=
     req_joint_idx = np.append(req_joint_idx, new_joint_idx + np.arange(n_super_children))
     for parent in super_parents:
         for child in children_all[parent]:
-            anim.parents[new_joint_idx] = parent
-            anim.parents[child] = new_joint_idx
-            names[new_joint_idx] = names[parent]+'_'+names[child]
+            if child in req_joint_idx:
+                anim.parents[new_joint_idx] = parent
+                anim.parents[child] = new_joint_idx
+                names[new_joint_idx] = names[parent]+'_'+names[child]
 
-            new_joint_idx += 1
+                new_joint_idx += 1
 
     # sort data items in a topological order
     sorted_order = get_sorted_order(anim.parents)

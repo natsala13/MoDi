@@ -22,15 +22,23 @@ REQUESTED_JOINT_NAMES_1 = ['Head', 'Neck', 'Spine', 'Spine1',
                           ]
 
 
+REQUESTED_JOINT_NAMES_MAU = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End',
+                             'RightRope1', 'RightRope2', 'RightRope3', 'RightRope4',
+                             'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
+                             'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+                             'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
+                             'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
+                             'RightChain1', 'RightChain2', 'RightChain3', 'RightChain3_end_site']
 
-def fix_joint_names(char, names):
+
+def fix_joint_names(char, names):  # TODO: Change that hardcoded function to detect automatic prefix.
     if char == 'Ty':
         names = np.char.lstrip(names, 'Boy:')
     elif char == 'Swat':
         names = np.char.lstrip(names, 'swat:')
     elif char == 'BigVegas':
         names = np.char.lstrip(names, 'newVegas:')
-    elif char in ['Andromeda', 'Douglas', 'Jasper', 'Liam', 'Malcolm', 'Pearl', 'Remy', 'Stefani']:
+    elif char in ['Andromeda', 'Douglas', 'Jasper', 'Liam', 'Malcolm', 'Pearl', 'Remy', 'Stefani', 'amy', 'mau']:
         names = np.char.lstrip(names, 'mixamorig:')
 
     return names
@@ -350,7 +358,7 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
     character_names = os.listdir(data_root)
     character_names = clean(character_names, data_root)
 
-    requested_joint_names = np.array(REQUESTED_JOINT_NAMES_1)
+    requested_joint_names = np.array(REQUESTED_JOINT_NAMES_MAU)
     requested_joint_names = np.array(requested_joint_names)
 
     anim_edges_split_all_chars = None
