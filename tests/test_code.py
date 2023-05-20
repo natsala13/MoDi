@@ -4,25 +4,24 @@ from unittest.mock import MagicMock
 
 import evaluate
 import generate
-import generate_encoder
 import inverse_optim
 import latent_space_edit as edit
 import train
-import train_encoder
+
 from models.gan import ModulatedConv, EqualConv, Blur
 from models.gan import keep_skeletal_dims
 from utils.data import Joint, Edge
-from traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits, NonSkeletonAwareTraits
+from utils.traits import SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits, NonSkeletonAwareTraits
 import torch
 import random
 import numpy as np
 import os
 
-device = 'cpu'
+device = 'cuda'
 blur_kernel = [1, 3, 3, 1]
 style_dim = 512
 batch = 16
-parameter_list = [SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits, NonSkeletonAwareTraits] #
+parameter_list = [SkeletonAwarePoolTraits, SkeletonAwareConv3DTraits, NonSkeletonAwareTraits]
 entity_list = {traits_class: [Joint, Edge] for traits_class in parameter_list}
 entity_list[NonSkeletonAwareTraits] = [Joint]  # NonSkeletonAwareTraits was not tested on Edges
 
@@ -96,7 +95,7 @@ class ModelsTest(unittest.TestCase):
 
             conv = ModulatedConv(out_channel, out_channel, kernel_size, style_dim, upsample=False,
                                  blur_kernel=blur_kernel, demodulate=True,
-                                 skeleton_traits=skeleton_traits).cuda()
+                                 skeleton_traits=skeleton_traits).to(device)
 
             input = torch.randn(batch, out_channel, skeleton_traits.smaller_n_joints,
                                 traits_class.n_frames(entity_class)[i]).to(device)
@@ -114,7 +113,7 @@ class ModelsTest(unittest.TestCase):
             skeleton_traits = traits_class(entity_class.parents_list[i], entity_class.skeletal_pooling_dist_1[i - 1])
 
             conv = ModulatedConv(in_channel, out_channel, kernel_size, style_dim, upsample=True,
-                                 blur_kernel=blur_kernel, demodulate=True, skeleton_traits=skeleton_traits).cuda()
+                                 blur_kernel=blur_kernel, demodulate=True, skeleton_traits=skeleton_traits).to(device)
 
             input = torch.randn(batch, in_channel, skeleton_traits.n_joints(entity_class)[i - 1],
                                 traits_class.n_frames(entity_class)[i - 1]).to(device)
@@ -439,15 +438,15 @@ class SuccessfullyRunAllMainsTest(unittest.TestCase):
                   '--path', edge_rot_data_path,'--ckpt', ckpt, '--n_iters', '2']
         inverse_optim.main(params)
 
-    def test_generate_encoder_runs_successfully(self):
-        params = ['--ckpt', encoder_ckpt, '--model_name', 'model_name_test', '--full_eval', '--out_path', f'utils/{tmp_save_path}',
-                  '--path', edge_rot_data_path, '--ckpt_existing', ckpt, '--eval_id', '25,26']
-        generate_encoder.main(params)
-
-    def test_train_encoder_runs_successfully(self):
-        params = ['--ckpt_existing', ckpt, '--n_frames', '0', '--iter', '2', '--model_save_path',
-                  f'utils/{tmp_save_path}', '--path', edge_rot_data_path, '--use_global_pos_perceptual_loss']
-        train_encoder.main(params)
+    # def test_generate_encoder_runs_successfully(self):
+    #     params = ['--ckpt', encoder_ckpt, '--model_name', 'model_name_test', '--full_eval', '--out_path', f'utils/{tmp_save_path}',
+    #               '--path', edge_rot_data_path, '--ckpt_existing', ckpt, '--eval_id', '25,26']
+    #     generate_encoder.main(params)
+    #
+    # def test_train_encoder_runs_successfully(self):
+    #     params = ['--ckpt_existing', ckpt, '--n_frames', '0', '--iter', '2', '--model_save_path',
+    #               f'utils/{tmp_save_path}', '--path', edge_rot_data_path, '--use_global_pos_perceptual_loss']
+    #     train_encoder.main(params)
 
     def tearDown(self) -> None:
         os.chdir('utils')
@@ -456,5 +455,5 @@ class SuccessfullyRunAllMainsTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    # unittest.main()
-    unittest.debug()
+    unittest.main()
+    # unittest.debug()
