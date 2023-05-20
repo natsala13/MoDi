@@ -13,20 +13,21 @@ from Motion.Animation import transforms_global, positions_global
 from utils.data import anim_from_edge_rot_dict, expand_topology_edges
 
 DEBUG = False
+SAVE_SUB_RESULTS = False
 
 # joints like in openpose plus 2 joints in the spine and plus shoulder bones(Jasper-like)
 REQUESTED_JOINT_NAMES_1 = ['Head', 'Neck', 'Spine', 'Spine1',
                            'Spine2', 'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
                            'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-                           'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot',
-                          ]
-# joints like in openpose
-REQUESTED_JOINT_NAMES_2 = ['Head', 'Neck', #'Spine', 'Spine1',
-                           #'Spine2', 'RightShoulder',
-                           'RightArm', 'RightForeArm', 'RightHand',
-                           'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-                           'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot',
-                          ]
+                           'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+
+REQUESTED_JOINT_NAMES_MAW = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End',
+                             'RightRope1', 'RightRope2', 'RightRope3', 'RightRope4',
+                             'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
+                             'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
+                             'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
+                             'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
+                             'RightChain1', 'RightChain2', 'RightChain3', 'RightChain3_end_site']
 
 
 def fix_joint_names(char, names):
@@ -36,7 +37,7 @@ def fix_joint_names(char, names):
         names = np.char.lstrip(names, 'swat:')
     elif char == 'BigVegas':
         names = np.char.lstrip(names, 'newVegas:')
-    elif char in ['Andromeda', 'Douglas', 'Jasper', 'Liam', 'Malcolm', 'Pearl', 'Remy', 'Stefani']:
+    elif char in ['Andromeda', 'Douglas', 'Jasper', 'Liam', 'Malcolm', 'Pearl', 'Remy', 'Stefani', 'maw']:
         names = np.char.lstrip(names, 'mixamorig:')
 
     return names
@@ -174,10 +175,10 @@ def dilute_joints_anim_file(anim_path, names_req_in_input, char, out_suffix, off
         idx_req_in_diluted = np.nonzero(names_req_in_input[:, None] == names_diluted)[1]
         sanity_check_joint_loc(anim_diluted, idx_req_in_diluted, anim_input, idx_req_in_input)
 
-    name, ext = osp.splitext(anim_path)
-    anim_path_diluted = name + out_suffix + ext
-
-    BVH.save(filename=anim_path_diluted, anim=anim_diluted, names=names_diluted, frametime=frametime)
+    if SAVE_SUB_RESULTS:
+        name, ext = osp.splitext(anim_path)
+        anim_path_diluted = name + out_suffix + ext
+        BVH.save(filename=anim_path_diluted, anim=anim_diluted, names=names_diluted, frametime=frametime)
 
 
 def sanity_check_joint_loc(anim1, idx_req1, anim2, idx_req2):
@@ -266,9 +267,10 @@ def joint_rot_2_edge_rot(anim, anim_path, out_suffix, names, frametime):
                           'pos_root': anim.positions[:,0], 'rot_root': anim.rotations[:,0], 'names_with_root': names_rot}
 
     # save results
-    name = osp.splitext(anim_path)[0]
-    anim_path_edge_rot = name + out_suffix + '_rot.npy'
-    np.save(anim_path_edge_rot, edge_rot_dict)
+    if SAVE_SUB_RESULTS:
+        name = osp.splitext(anim_path)[0]
+        anim_path_edge_rot = name + out_suffix + '_rot.npy'
+        np.save(anim_path_edge_rot, edge_rot_dict)
 
     if DEBUG:
         sanity_check_joint_rot_2_edge_rot(edge_rot_dict, anim, anim_path, frametime)
@@ -321,22 +323,28 @@ def split_to_fixed_length_clips(anim_edge_rot, anim_dir_path, out_suffix, clip_l
                                 frametime):
     assert clip_len % stride == 0
     divisor = clip_len // stride
-    mot_dir = os.path.join(anim_dir_path, 'motions{}'.format(out_suffix))
-    os.makedirs(mot_dir, exist_ok=True)
+
+    mot_dir = os.path.join(anim_dir_path, f'motions{out_suffix}')
+    if SAVE_SUB_RESULTS:
+        os.makedirs(mot_dir, exist_ok=True)
+
     n_frames = anim_edge_rot['rot_edge_no_root'].shape[0]
     n_clips = n_frames // (clip_len // divisor) - (divisor - 1)
     all_clips = np.empty(max(n_clips, 0), dtype=dict)
     all_motion_names = list()
 
     for i in range(n_clips):
-        save_path = os.path.join(mot_dir, '{}.npy'.format(i + 1))
         clip = copy.deepcopy(anim_edge_rot)
         frame_from = i * (clip_len // divisor)
         frame_to = i * (clip_len // divisor) + clip_len
         clip['rot_edge_no_root'] = clip['rot_edge_no_root'][frame_from: frame_to, :]
         clip['pos_root'] = clip['pos_root'][frame_from: frame_to, :]
         clip['rot_root'] = clip['rot_root'][frame_from: frame_to]
-        np.save(save_path, clip)
+
+        save_path = os.path.join(mot_dir, '{}.npy'.format(i + 1))
+        if SAVE_SUB_RESULTS:
+            np.save(save_path, clip)
+
         all_clips[i] = clip
         all_motion_names.append(save_path)
         assert clip['pos_root'].shape[0] == clip_len
@@ -355,7 +363,7 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
     character_names = os.listdir(data_root)
     character_names = clean(character_names, data_root)
 
-    requested_joint_names = np.array(REQUESTED_JOINT_NAMES_1)
+    requested_joint_names = np.array(REQUESTED_JOINT_NAMES_MAW)
     requested_joint_names = np.array(requested_joint_names)
 
     anim_edges_split_all_chars = None
@@ -388,21 +396,25 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
 
             ###
             # expand topology: add dummy vertices where a joint has more than one child
-            ###
-            anim_input_exp, idx_req_in_input_exp, names_input_exp, offset_len_mean_exp = \
-                expand_topology_edges(anim_input, idx_req_in_input, names_input_fixed, offset_len_mean, nearest_joint_ratio=1)
-            sanity_check_expand_topology(anim_input, anim_input_exp, anim_file_path, frametime, idx_req_in_input,
-                                         names_input_exp, names_req_in_input)
+            # ###
+            # anim_original_debug = copy.deepcopy(anim_input)
+            # idx_req_in_input_debug = copy.deepcopy(idx_req_in_input)
+            #
+            # anim_input, idx_req_in_input, names_input_fixed, offset_len_mean = \
+            #     expand_topology_edges(anim_input, idx_req_in_input, names_input_fixed, offset_len_mean, nearest_joint_ratio=1)
+            # sanity_check_expand_topology(anim_original_debug, anim_input, anim_file_path, frametime, idx_req_in_input_debug,
+            #                              names_input_fixed, names_req_in_input)
 
             ###
             # remove joints that are not required for the algorithm
             ###
-            anim_diluted = dilute_joints_anim(anim_input_exp, idx_req_in_input_exp, offset_len_mean_exp)
-            names_diluted = names_input_exp[idx_req_in_input_exp]
+            anim_diluted = dilute_joints_anim(anim_input, idx_req_in_input, offset_len_mean)
+            names_diluted = names_input_fixed[idx_req_in_input]
             sanity_check_dilute_joints(anim_diluted, anim_input, idx_req_in_input, names_diluted, names_req_in_input)
             name, ext = osp.splitext(anim_file_path)
-            anim_path_diluted = name + out_suffix + ext
-            BVH.save(filename=anim_path_diluted, anim=anim_diluted, names=names_diluted, frametime=frametime)
+            if SAVE_SUB_RESULTS:
+                anim_path_diluted = name + out_suffix + ext
+                BVH.save(filename=anim_path_diluted, anim=anim_diluted, names=names_diluted, frametime=frametime)
 
             ###
             # convert joint rotations to edge rotations
@@ -427,9 +439,9 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
     ###
     # save final files
     ###
-    anim_edges_split_all_chars_file_name = osp.join(data_root, 'edge_rot'+out_suffix+'.npy')
+    anim_edges_split_all_chars_file_name = f'edge_rot_{out_suffix}.npy'  # osp.join(data_root, 'edge_rot'+out_suffix+'.npy')
     np.save(anim_edges_split_all_chars_file_name, anim_edges_split_all_chars)
-    names_split_all_chars_file_name = osp.join(data_root, 'file_names'+out_suffix+'.txt')
+    names_split_all_chars_file_name = f'file_names_{out_suffix}.npy'  # osp.join(data_root, 'file_names'+out_suffix+'.txt')
     np.savetxt(names_split_all_chars_file_name, names_split_all_chars, fmt='%s')
 
 
