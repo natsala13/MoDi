@@ -1,3 +1,5 @@
+import copy
+
 from evaluation.models.stgcn import STGCN
 import re
 import pandas as pd
@@ -57,15 +59,35 @@ def generate(args, g_ema, device, mean_joints, std_joints):
     generated_motion_np, _ = get_gen_mot_np(args, generated_motion, mean_joints, std_joints)
     generated_motions = np.concatenate(generated_motion_np, axis=0)
 
+    # EVALUATE_MOTION_INPUT = 'debug/evaluate/generated_motion_input.npy'
+    # EVALUATE_MOTION_OUTPUT = 'debug/evaluate/generated_motion_to_location_output.npy'
+    # EVALUATE_EDGE_ROT_DICT = 'debug/evaluate/edge_rot_debug.npy'
+    # debug_input = np.load(EVALUATE_MOTION_INPUT, allow_pickle=True)
+    # debug_input = [debug_input[i] for i in range(len(debug_input))]
+    # debug_output = np.load(EVALUATE_MOTION_OUTPUT, allow_pickle=True)
+    # debug_edge_rot = np.load(EVALUATE_EDGE_ROT_DICT, allow_pickle=True).item()
+    #
     _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))
-    generated_motions = convert_motions_to_location(args, generated_motion_np, edge_rot_dict_general)
+    #
+    # np.save(EVALUATE_MOTION_INPUT, generated_motion_np)
+    # np.save(EVALUATE_EDGE_ROT_DICT, edge_rot_dict_general)
+    #
+    # import ipdb;ipdb.set_trace()
+    generated_motions = convert_motions_to_location(generated_motion_np, edge_rot_dict_general, args.dataset)
+
+    # np.save(EVALUATE_MOTION_OUTPUT, generated_motions)
+
     return generated_motions
 
 
-def convert_motions_to_location(args, generated_motion_np, edge_rot_dict_general):
+def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, dataset_type):
     edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
     edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
-    if args.dataset == 'mixamo':
+
+    edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
+    generated_motion_np = copy.deepcopy(generated_motion_np)
+
+    if dataset_type == 'mixamo':
         edge_rot_dict_general['offsets_no_root'] /= 100 ## not needed in humanact
 
     generated_motions = []
@@ -83,7 +105,41 @@ def convert_motions_to_location(args, generated_motion_np, edge_rot_dict_general
         positions_15joints = positions[:, [7, 6, 15, 16, 17, 10, 11, 12, 0, 23, 24, 25, 19, 20, 21]] # openpose order R then L
         positions_15joints = positions_15joints.transpose(1, 2, 0)
         positions_15joints_oriented = positions_15joints.copy()
-        if args.dataset == 'mixamo':
+        if dataset_type == 'mixamo':
+            positions_15joints_oriented = positions_15joints_oriented[:, [0, 2, 1]]
+            positions_15joints_oriented[:, 1, :] = -1 * positions_15joints_oriented[:, 1, :]
+        generated_motions.append(positions_15joints_oriented)
+
+    generated_motions = np.asarray(generated_motions)
+    return generated_motions
+
+
+def convert_motions_to_location_orig(generated_motion_np, edge_rot_dict_general, dataset_type):
+    edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
+    edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
+
+    edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
+    generated_motion_np = copy.deepcopy(generated_motion_np)
+
+    if dataset_type == 'mixamo':
+        edge_rot_dict_general['offsets_no_root'] /= 100 ## not needed in humanact
+
+    generated_motions = []
+
+    # get anim for xyz positions
+    motion_data = un_normalize(generated_motion_np, mean=edge_rot_dict_general['mean'].transpose(0, 2, 1, 3), std=edge_rot_dict_general['std'].transpose(0, 2, 1, 3))
+    anim_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general = edge_rot_dict_general)
+
+    for j, (anim_dict, frame_mult) in enumerate(zip(anim_dicts, frame_mults)):
+        anim, names = anim_from_edge_rot_dict(anim_dict, root_name='Hips')
+        # compute global positions using anim
+        positions = Animation.positions_global(anim)
+
+        # sample joints relevant to 15 joints skeleton
+        positions_15joints = positions[:, [7, 6, 15, 16, 17, 10, 11, 12, 0, 23, 24, 25, 19, 20, 21]] # openpose order R then L
+        positions_15joints = positions_15joints.transpose(1, 2, 0)
+        positions_15joints_oriented = positions_15joints.copy()
+        if dataset_type == 'mixamo':
             positions_15joints_oriented = positions_15joints_oriented[:, [0, 2, 1]]
             positions_15joints_oriented[:, 1, :] = -1 * positions_15joints_oriented[:, 1, :]
         generated_motions.append(positions_15joints_oriented)

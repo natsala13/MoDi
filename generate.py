@@ -223,9 +223,15 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
         normalisation_data = {'std': edge_rot_dict_general['std'].transpose(0, 2, 1, 3),
                               'mean': edge_rot_dict_general['mean'].transpose(0, 2, 1, 3),
                               'parents_with_root': edge_rot_dict_general['parents_with_root']}
-        fig = motion2fig(static, motion_np, normalisation_data,
-                         n_sampled_motions=n_motions,
-                         n_sampled_frames=n_sampled_frames)
+
+        motion_batch = torch.tensor([motion[0] for motion in motion_np]).permute(0, 2, 1, 3)
+        dynamics = DynamicData(motion_batch, static)
+        dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
+        fig = motion2fig(static, dynamics)
+
+        # fig = motion2fig(static, motion_np, normalisation_data,
+        #                  n_sampled_motions=n_motions,
+        #                  n_sampled_frames=n_sampled_frames)
 
         prefix_no_underscore = prefix.replace('_', '')
         fig_name = osp.join(out_path, f'{prefix_no_underscore}.png')
@@ -241,8 +247,10 @@ def generate(args, g_ema, device, mean_joints, std_joints, static):
                 cluster_label = generated_motion.cluster_label[idx]
                 cluster_label = torch.argmax(cluster_label).item()
                 id = f'g{cluster_label:02d}_{id}'
-            motion2bvh_rot(motion_np[i], osp.join(out_path, f'{prefix}{id}.bvh'),
-                           normalisation_data, static)
+
+            motion2bvh_rot(static, dynamics[i], osp.join(out_path, f'{prefix}{id}.bvh'))
+            # motion2bvh_rot(motion_np[i], osp.join(out_path, f'{prefix}{id}.bvh'),
+            #                normalisation_data, static)
 
     # save args
     pd.Series(args.__dict__).to_csv(osp.join(root_out_path, 'args.csv'), sep='\t', header=None)
