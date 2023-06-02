@@ -308,7 +308,7 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
 
     if return_motion_data:
         motion_data_raw = np.load(args.path, allow_pickle=True)
-        motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw)
+        motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
 
         mean_latent = g_ema.mean_latent(args.truncation_mean)
 

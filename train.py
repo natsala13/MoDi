@@ -140,7 +140,7 @@ def sigmoid_for_contact(predicted_foot_contact):
 
 def g_foot_contact_loss_v2(motion, static: StaticData, normalisation_data, global_position, use_velocity):
     # motion is of shape samples x features x joints x frames
-    label_idx = motion.shape[2] - len(foot_names)
+    label_idx = motion.shape[2] - static.foot_number
 
     velo = get_foot_velo(motion[:, :, :label_idx], static, normalisation_data, global_position, use_velocity)
 
@@ -555,7 +555,7 @@ def main(args_not_parsed):
         g_optim.load_state_dict(ckpt["g_optim"])
         d_optim.load_state_dict(ckpt["d_optim"])
 
-    motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw)
+    motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
 
     # # Just save some real motion for start - Why?
     # motion_path = osp.join(animations_output_folder, 'real_motion.bvh')

@@ -22,6 +22,7 @@ from Motion import Animation
 from matplotlib import pyplot as plt
 from generate import get_gen_mot_np, sample
 from utils.pre_run import EvaluateOptions, load_all_form_checkpoint
+from motion_class import StaticData
 
 TEST = False
 
@@ -67,7 +68,17 @@ def generate(args, g_ema, device, mean_joints, std_joints):
     # debug_output = np.load(EVALUATE_MOTION_OUTPUT, allow_pickle=True)
     # debug_edge_rot = np.load(EVALUATE_EDGE_ROT_DICT, allow_pickle=True).item()
     #
-    _, _, _, edge_rot_dict_general = motion_from_raw(args, np.load(args.path, allow_pickle=True))
+    motion_data_raw = np.load(args.path, allow_pickle=True)
+    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+    static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
+                        offsets=offsets,
+                        names=motion_data_raw[0]['names_with_root'],
+                        n_channels=4,
+                        enable_global_position=args.glob_pos,
+                        enable_foot_contact=args.foot,
+                        rotation_representation=args.rotation_repr)
+
+    _, _, _, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
     #
     # np.save(EVALUATE_MOTION_INPUT, generated_motion_np)
     # np.save(EVALUATE_EDGE_ROT_DICT, edge_rot_dict_general)
