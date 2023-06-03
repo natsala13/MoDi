@@ -393,7 +393,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                                         local_path=motion_path)
 
                 dynamics = DynamicData(fake_img.detach().cpu(), static)
-                dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
+                dynamics = dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
 
                 motion2bvh_rot(static, dynamics[0], motion_path)
                 fig = motion2fig(static, dynamics[:5])

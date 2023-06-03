@@ -76,10 +76,10 @@
 [X] Remove root position and foot contact.
 [ ] Dynamic class - use velocity flag
 [X] Remove expand topology
-[ ] generate function exist both in generate and in evaluate.
+[x] generate function exist both in generate and in evaluate.
 [v] Stop with default None values.
 [v] Foot contact for more than 2 feet - change preprocessing
-[ ] generate bug.
+[v] generate bug.
 
 [v] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
@@ -220,9 +220,9 @@ class StaticData:
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
-        feet_names = [LEFT_FOOT_NAME, LEFT_TOE, RIGHT_FOOT_NAME, RIGHT_TOE] if include_toes else [LEFT_FOOT_NAME,
-                                                                                                  RIGHT_FOOT_NAME]
-        # feet_names = [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
+        # feet_names = [LEFT_FOOT_NAME, LEFT_TOE, RIGHT_FOOT_NAME, RIGHT_TOE] if include_toes else [LEFT_FOOT_NAME,
+        #                                                                                           RIGHT_FOOT_NAME]
+        feet_names = [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
 
         foot_indexes = [i for i, name in enumerate(self.names) if name in feet_names]
         all_foot_indexes = [foot_indexes]
@@ -531,10 +531,10 @@ class DynamicData:
         return location  # K x T
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
-        self.motion = self.motion * std + mean
+        return DynamicData(self.motion * std + mean, self.static)
 
     def sample_frames(self, frames_indexes: [int]):
-        self.motion = self.motion[..., frames_indexes]
+        return DynamicData(self.motion[..., frames_indexes], self.static)
 
 
 def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean=None, nearest_joint_ratio=0.9):

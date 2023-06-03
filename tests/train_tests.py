@@ -72,8 +72,8 @@ def normalisation_data(metadata):
 @pytest.fixture(scope='session')
 def sampled_dynamic(dynamic, normalisation_data):
     sampled_frames = np.linspace(0, dynamic.n_frames - 1, 5).round().astype(int)
-    dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
-    dynamic.sample_frames(sampled_frames)
+    dynamic = dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+    dynamic = dynamic.sample_frames(sampled_frames)
 
     return dynamic
 
