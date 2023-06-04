@@ -395,19 +395,24 @@ class ModelsTest(unittest.TestCase):
 
 tmp_save_path = 'tmp_test_data'
 # paths on dan5
-ckpt = '/disk2/inball1/trains_outputs/Jasper_all_5K_norm_mixing_0p9_pool_edgerot_deep_globpos_footvelo_shab3e.09076a85e4644b8fb6c1550bc6679d11/models/079999.pt'
-encoder_ckpt = '/disk2/inball1/clearml_outputs/ablations/encoder_train_shab3e090_loss_ablation_all.988fd983733a45d881896461244c8ec5/models/079999.pt'
-edge_rot_data_path = '/disk2/inball1/repos/MoDi/data/edge_rot_data.npy'
-act_rec_gt_path = '/disk2/inball1/repos/MoDi/data/joint_loc_data.npy'
+ckpt = './checkpoints/trained_model_80k.pt'
+edge_rot_data_path = './data/edge_rot_data.npy'
+act_rec_gt_path = '/home/dcor/datasets/motion/mixamo/npy/all_bin_30_fps/motion.npy'
+
+# ckpt = '/disk2/inball1/trains_outputs/Jasper_all_5K_norm_mixing_0p9_pool_edgerot_deep_globpos_footvelo_shab3e.09076a85e4644b8fb6c1550bc6679d11/models/079999.pt'
+# encoder_ckpt = '/disk2/inball1/clearml_outputs/ablations/encoder_train_shab3e090_loss_ablation_all.988fd983733a45d881896461244c8ec5/models/079999.pt'
+# edge_rot_data_path = '/disk2/inball1/repos/MoDi/data/edge_rot_data.npy'
+# act_rec_gt_path = '/disk2/inball1/repos/MoDi/data/joint_loc_data.npy'
+
 
 class SuccessfullyRunAllMainsTest(unittest.TestCase):
 
-    def setUp(self) -> None:
-        os.chdir('..')
+    # def setUp(self) -> None:
+    #     os.chdir('..')
 
     def test_evaluate_runs_successfully(self):
         evaluate.TEST = True  # to generate 64 motions instead of 2000
-        params = ['--fast', '--ckpt', ckpt, '--act_rec_gt_path', act_rec_gt_path, '--path', edge_rot_data_path]
+        params = ['--ckpt', ckpt, '--act_rec_gt_path', act_rec_gt_path, '--path', edge_rot_data_path]
         evaluate.main(params)
 
     def test_generate_sample_runs_successfully(self):
@@ -449,7 +454,7 @@ class SuccessfullyRunAllMainsTest(unittest.TestCase):
     #     train_encoder.main(params)
 
     def tearDown(self) -> None:
-        os.chdir('utils')
+        # os.chdir('utils')
         if os.path.isdir(tmp_save_path):
             shutil.rmtree(tmp_save_path, ignore_errors=False, onerror=None)
 
