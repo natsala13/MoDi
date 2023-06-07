@@ -367,14 +367,13 @@ class StaticData:
         return [edge[0] for edge in edges]
 
     def calculate_all_pooling_levels(self, parents0):
-        # pooling = self._calculate_pooling_for_level(self.parents)
         all_parents = [list(parents0)]
         all_poolings = []
         degree = StaticData._topology_degree(all_parents[-1])
 
-        while any(d == 1 for d in degree):
-            pooling = self._calculate_degree1_pooling(all_parents[-1], degree)
-            pooling[(-1, 0)] = [(-1, 0)]  # Add root rotation pooling.
+        while len(all_parents[-1]) > 2:
+            pooling = self._calculate_pooling_for_level(all_parents[-1], degree)
+            pooling[(-1, 0)] = [(-1, 0)]
 
             normalised_pooling = self._normalise_joints(pooling)
             normalised_parents = self._edges_to_parents(normalised_pooling.keys())
@@ -385,9 +384,9 @@ class StaticData:
             degree = StaticData._topology_degree(all_parents[-1])
 
         # TODO: make pooling after primal skeleton automatic.
-        all_parents += [[-1, 0, 1], [-1]]
-        all_poolings += [{(-1, 0): [(-1, 0)], (0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
-                         {(-1, 0): [(-1, 0), (0, 1), (1, 2)]}]
+        # all_parents += [[-1, 0, 1], [-1]]
+        # all_poolings += [{(-1, 0): [(-1, 0)], (0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
+        #                  {(-1, 0): [(-1, 0), (0, 1), (1, 2)]}]
 
         return all_parents[::-1], all_poolings[::-1]
 
@@ -437,11 +436,12 @@ class StaticData:
 
         return neighbors
 
-    def plot(self, parents):
+    def plot(self, parents, show=True):
         graph = nx.Graph()
         graph.add_edges_from(self.edge_list(parents))
         nx.draw_networkx(graph)
-        plt.show()
+        if show:
+            plt.show()
 
 
 class DynamicData:
