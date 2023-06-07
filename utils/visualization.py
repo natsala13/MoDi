@@ -21,6 +21,7 @@ FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftA
                  'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
                  'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
 
+
 def pose2im_all(all_peaks, H=512, W=512):
     limbSeq = [[1, 2], [2, 3], [3, 4],                       # right arm
                [1, 5], [5, 6], [6, 7],                       # left arm
@@ -127,7 +128,7 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
                height=512, width=512, n_sampled_motions=5, n_sampled_frames=5):
     n_sampled_motions = min(n_sampled_motions, dynamics.n_frames, 10)
     sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
-    dynamics.sample_frames(sampled_frames)
+    dynamics = dynamics.sample_frames(sampled_frames)
 
     anim, names = anim_from_static(static, dynamics[0])
 

@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from utils.data import Edge, anim_from_edge_rot_dict
 from motion_class import StaticData, DynamicData, anim_from_static
 from utils.visualization import motion2fig
+from evaluate import convert_motions_to_location
 
 
 FAKE_MOTION = 'debug/fig2img/fake_motion_399.npy'
@@ -15,6 +16,10 @@ FAKE_METADATA_PROCESSED = 'debug/fig2img/fake_metadata_after_process.npy'
 SAVE_PATH = 'debug/fig2img/out.png'
 BVH_PATH = 'debug/fig2img/out.bvh'
 DB_PATH = 'data/edge_rot_data.npy'
+
+EVALUATE_MOTION_INPUT = 'debug/evaluate/generated_motion_input.npy'
+EVALUATE_MOTION_OUTPUT = 'debug/evaluate/generated_motion_to_location_output.npy'
+EVALUATE_EDGE_ROT_DICT = 'debug/evaluate/edge_rot_debug.npy'
 
 
 @pytest.fixture(autouse=True)
@@ -67,10 +72,26 @@ def normalisation_data(metadata):
 @pytest.fixture(scope='session')
 def sampled_dynamic(dynamic, normalisation_data):
     sampled_frames = np.linspace(0, dynamic.n_frames - 1, 5).round().astype(int)
-    dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
-    dynamic.sample_frames(sampled_frames)
+    dynamic = dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+    dynamic = dynamic.sample_frames(sampled_frames)
 
     return dynamic
+
+
+@pytest.fixture(scope='session')
+def motion_input():
+    mat = np.load(EVALUATE_MOTION_INPUT, allow_pickle=True)
+    return [mat[i] for i in range(len(mat))]
+
+
+@pytest.fixture(scope='session')
+def motion_golden():
+    return np.load(EVALUATE_MOTION_OUTPUT, allow_pickle=True)
+
+
+@pytest.fixture(scope='session')
+def evaluate_edge_rot_dict():
+    return np.load(EVALUATE_EDGE_ROT_DICT, allow_pickle=True).item()
 
 
 def test_rotations(static, sampled_dynamic, metadata_processed, normalisation_data):
@@ -101,3 +122,8 @@ def test_generate_figure_static(static, motion, normalisation_data):
     fig = motion2fig(static, motion, normalisation_data=normalisation_data)
     fig.savefig(SAVE_PATH, dpi=300, bbox_inches='tight')
     plt.close()
+
+
+def test_evaluate_motion_to_location(motion_input, motion_golden, evaluate_edge_rot_dict):
+    generated_motions = convert_motions_to_location(motion_input, evaluate_edge_rot_dict, 'mixamo')
+    assert np.all(generated_motions == motion_golden)

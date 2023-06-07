@@ -143,7 +143,7 @@ class EqualConv(nn.Module):
             stride=self.stride,
             padding=self.padding,
         )
-        out = st.reshape_output_after_conv(out) # ==> batch, out_channel, out_height, out_width
+        out = st.reshape_output_after_conv(out)  # ==> batch, out_channel, out_height, out_width
 
         # i = torch.ones_like(input)
         # for ii in range(i.shape[-2]):  # each edge's value equals its index, for all samples, channels and frames
@@ -181,9 +181,7 @@ class EqualLinear(nn.Module):
             out = fused_leaky_relu(out, self.bias * self.lr_mul)
 
         else:
-            out = F.linear(
-                input, self.weight * self.scale, bias=self.bias * self.lr_mul
-            )
+            out = F.linear(input, self.weight * self.scale, bias=self.bias * self.lr_mul)
 
         return out
 

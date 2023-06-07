@@ -76,8 +76,10 @@
 [X] Remove root position and foot contact.
 [ ] Dynamic class - use velocity flag
 [X] Remove expand topology
-[ ] generate function exist both in generate and in evaluate.
+[x] generate function exist both in generate and in evaluate.
 [v] Stop with default None values.
+[v] Foot contact for more than 2 feet - change preprocessing
+[v] generate bug.
 
 [v] make training working using motion class.
 [ ] make sure that bvh is loaded properly from any bvh including pre process function.
@@ -114,7 +116,9 @@ BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
 
 LEFT_FOOT_NAME = 'LeftFoot'
+LEFT_TOE = 'LeftToeBase'
 RIGHT_FOOT_NAME = 'RightFoot'
+RIGHT_TOE = 'RightToeBase'
 
 
 class EdgePoint(tuple):
@@ -214,14 +218,22 @@ class StaticData:
         for parents in self.parents_list:
             parents.append(-2)
 
-    def foot_indexes(self):
+    def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
-        foot_indexes = [i for i, name in enumerate(self.names) if name in [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]]
+        # feet_names = [LEFT_FOOT_NAME, LEFT_TOE, RIGHT_FOOT_NAME, RIGHT_TOE] if include_toes else [LEFT_FOOT_NAME,
+        #                                                                                           RIGHT_FOOT_NAME]
+        feet_names = [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
+
+        foot_indexes = [i for i, name in enumerate(self.names) if name in feet_names]
         all_foot_indexes = [foot_indexes]
         for pooling in self.skeletal_pooling_dist_1[::-1]:
             all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
 
         return all_foot_indexes[::-1]
+
+    @property
+    def foot_number(self):
+        return len(self.foot_indexes()[-1])
 
     def _enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
@@ -237,7 +249,7 @@ class StaticData:
                 parent.append((-3, foot_index))
 
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
-            for pooling_hierarchical_stage, foot_indexes in zip(pooling_list, all_foot_indexes):  # TODO: Do not update the last one
+            for pooling_hierarchical_stage, foot_indexes in zip(pooling_list, all_foot_indexes):
                 for _ in foot_indexes:
                     n_small_stage = max(pooling_hierarchical_stage.keys()) + 1
                     n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
@@ -457,7 +469,7 @@ class DynamicData:
         assert self.motion.shape[-2] == len(self.static.parents_list[-1])
         assert self.motion.shape[-3] == self.static.n_channels
 
-        foot_contact_joints = 2 if self.static.enable_foot_contact else 0
+        foot_contact_joints = self.static.foot_number if self.static.enable_foot_contact else 0
         global_position_joint = 1 if self.static.enable_global_position else 0
         assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
 
@@ -519,10 +531,10 @@ class DynamicData:
         return location  # K x T
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
-        self.motion = self.motion * std + mean
+        return DynamicData(self.motion * std + mean, self.static)
 
     def sample_frames(self, frames_indexes: [int]):
-        self.motion = self.motion[..., frames_indexes]
+        return DynamicData(self.motion[..., frames_indexes], self.static)
 
 
 def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean=None, nearest_joint_ratio=0.9):

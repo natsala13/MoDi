@@ -9,8 +9,8 @@ from Motion.AnimationStructure import children_list, get_sorted_order
 from Motion.Quaternions import Quaternions
 from Motion.Animation import Animation
 
-import torch # used for foot contact
-from utils.foot import get_foot_contact_original
+import torch  # used for foot contact
+from utils.foot import get_foot_contact
 
 
 foot_names = ['LeftFoot', 'RightFoot']
@@ -689,7 +689,7 @@ def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dic
     return edge_rots, frame_mults, is_sub_motion
 
 
-def motion_from_raw(args, motion_data_raw):
+def motion_from_raw(args, motion_data_raw, static):
     if args.entity == 'Joint':
         if args.skeleton:
             # motion data has an additional dummy joint to support prev architecture. we don't need it anymore so we drop it
@@ -760,7 +760,8 @@ def motion_from_raw(args, motion_data_raw):
 
         if args.foot:
             motion_data_torch = torch.from_numpy(motion_data).transpose(1, 2)
-            motion_data_torch = append_foot_contact(motion_data_torch, args.glob_pos, args.axis_up, edge_rot_dict_general)
+            motion_data_torch = append_foot_contact(motion_data_torch, static, edge_rot_dict_general,
+                                                    args.glob_pos, args.use_velocity, args.axis_up)
             motion_data = motion_data_torch.transpose(1, 2).numpy()
 
             # Do not normalize the contact label
@@ -780,12 +781,12 @@ def motion_from_raw(args, motion_data_raw):
     return motion_data, mean_joints, std_joints, edge_rot_dict_general
 
 
-def append_foot_contact(motion_data, glob_pos, axis_up, edge_rot_dict_general):
-    foot_contact = get_foot_contact_original(motion_data, glob_pos, axis_up, edge_rot_dict_general, foot_names=foot_names)
+def append_foot_contact(motion_data, static, normalisation_data, global_position, use_velocity, axis_up):
+    foot_contact = get_foot_contact(motion_data, static, normalisation_data,
+                                    use_global_position=global_position, use_velocity=use_velocity, axis_up=axis_up)
 
     #  pad foot_contact to the size of motion_data features (quaternions or other)
-    n_foot = len(foot_names)
-    foot_contact_padded = torch.zeros_like(motion_data[:, :, :n_foot])
+    foot_contact_padded = torch.zeros_like(motion_data[:, :, :static.foot_number])
     foot_contact_padded[:, 0] = foot_contact
 
     # concatenate on edges axis (foot_contact is like an extra edge)
