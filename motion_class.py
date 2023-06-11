@@ -1,31 +1,10 @@
-# BVH file contains...
-#
-# rot_edge_no_root - (64, 19, 4)
-# parents_with_root - 20
-# offsets_no_root - (19, 3)
-# rot_root - (64, 4)
-# pos_root - (64, 3)
-# offset_root - (3,)
-# names_with_root - (20,)
-# contact - (64, 2, 4)
-
-
-# edge_rot_dict['parents_with_root']
-# [-1, 0, 1, 2, 3, 4, 3, 6, 7, 8, 3, 10, 11, 12, 0, 14, 15, 0, 17, 18]
-#
-# edge_rot_dict['names_with_root']
-# names =['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head',
-#        'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-#        'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
-#        'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg',
-#        'RightFoot']
 """ Design change
 * traits class should be used the same - record that each instance needs some parent and pooling list.
 * Motion class should replace Edge class - answer to all its needs.
     -> n_joints(entity) = calc over parent's list lengths.
     -> n_frames(entity) = calc over how many parents list there are.
     -> n_channels(entity) = how many parents list exists - take all needed values from constant
-    -> n_channels = const - 4
+    -> n_channels = {Edge: 4, Joint: 3}
     -> parent_list
     -> skeletal_pooling_dist_1
     -> skeletal_pooling_dist_0
@@ -159,13 +138,14 @@ class StaticData:
             self._enable_repr6d()
 
     @classmethod
-    def init_from_bvh(cls, bvf_filepath: str, enable_global_position=False,
-                      enable_foot_contact=False, rotation_representation='quaternion'):
+    def init_from_bvh(cls, bvf_filepath: str, *args, **kwargs):
         animation, names, frametime = BVH.load(bvf_filepath)
-        return cls(animation.parents, animation.offsets, names,
-                   enable_global_position=enable_global_position,
-                   enable_foot_contact=enable_foot_contact,
-                   rotation_representation=rotation_representation)
+        return cls(animation.parents, animation.offsets, names, *args, **kwargs)
+
+    @classmethod
+    def init_from_bvh_data(cls, motion, *args, **kwargs):
+        offsets = np.concatenate([motion['offset_root'][np.newaxis, :], motion['offsets_no_root']])
+        return cls(motion['parents_with_root'], offsets, motion['names_with_root'], *args, **kwargs)
 
     @property
     def parents(self):
@@ -486,7 +466,14 @@ class DynamicData:
                             enable_foot_contact=enable_foot_contact,
                             rotation_representation=rotation_representation)
 
-        return cls(animation.rotations.qs,static)
+        return cls(animation.rotations.qs, static)
+
+    @classmethod
+    def init_from_bvh_data(cls, motion):
+        static = StaticData.init_from_bvh_data(motion)
+        rotations = np.concatenate([motion['rot_root'][:, np.newaxis], motion['rot_edge_no_root']], axis=1)
+
+        return cls(torch.tensor(rotations.transpose(2, 1, 0)), static)
 
     def __iter__(self):
         if self.motion.ndim == 4:

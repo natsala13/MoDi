@@ -11,7 +11,7 @@ import torch.distributed as dist
 from torch.utils.data import TensorDataset
 from tqdm import tqdm
 
-from utils.visualization import motion2fig, motion2bvh_rot
+from utils.visualization import motion2fig, motion2bvh_rot, motion2bvh_loc
 from utils.data import calc_bone_lengths
 from utils.traits import *
 from utils.data import foot_names
@@ -395,12 +395,16 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 dynamics = DynamicData(fake_img.detach().cpu(), static)
                 dynamics = dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
 
-                motion2bvh_rot(static, dynamics[0], motion_path)
-                fig = motion2fig(static, dynamics[:5])
+                if args.entity == 'Joint':
+                    motion2bvh_loc(dynamics[0].motion.numpy().transpose(1, 0, 2), motion_path, static.parents_list)
+                else:
+                    motion2bvh_rot(static, dynamics[0], motion_path)
+                    fig = motion2fig(static, dynamics[:5])
 
-                fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
-                fig.savefig(fig_path, dpi=300, bbox_inches='tight')
-                plt.close()  # close figure
+                    fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
+                    fig.savefig(fig_path, dpi=300, bbox_inches='tight')
+                    plt.close()  # close figure
+
                 if args.clearml:
                     logger.report_media(title='Image', series='Predicted Motion', iteration=i, local_path=fig_path)
 
@@ -470,6 +474,7 @@ def main(args_not_parsed):
     elif args.tensorboard:
         output_folder = os.path.join(args.model_save_path, 'tensorboard_outputs')
         os.makedirs(output_folder, exist_ok=True)
+
         from torch.utils.tensorboard import SummaryWriter
         writer = SummaryWriter(output_folder)
         logger = LossRecorder(writer)
@@ -498,15 +503,24 @@ def main(args_not_parsed):
 
     motion_data_raw = np.load(args.path, allow_pickle=True)
 
-    # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
-    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
-    static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
-                        offsets=offsets,
-                        names=motion_data_raw[0]['names_with_root'],
-                        n_channels=4,
-                        enable_global_position=args.glob_pos,
-                        enable_foot_contact=args.foot,
-                        rotation_representation=args.rotation_repr)
+    if args.entity == 'Edge':
+        # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
+        offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+        static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
+                            offsets=offsets,
+                            names=motion_data_raw[0]['names_with_root'],
+                            n_channels=4,
+                            enable_global_position=args.glob_pos,
+                            enable_foot_contact=args.foot,
+                            rotation_representation=args.rotation_repr)
+    elif args.entity == 'Joint':
+        static = StaticData(parents=Joint().parents_list[-1],
+                            offsets=None,
+                            names=None,
+                            n_channels=3,
+                            enable_global_position=args.glob_pos,
+                            enable_foot_contact=args.foot,
+                            rotation_representation=args.rotation_repr)
 
     if args.foot:  # TODO: Why is that?
         args.axis_up = 1
@@ -583,7 +597,7 @@ def main(args_not_parsed):
         drop_last=True,
     )
 
-    use_velocity = 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
+    use_velocity = args.entity == 'Edge' and 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
     train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static,
           animations_output_folder, images_output_folder, mean_joints, std_joints, use_velocity)
 

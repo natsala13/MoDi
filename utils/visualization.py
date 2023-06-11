@@ -159,13 +159,12 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
                 pass  # in some configurations the image cannot be shown
     return fig
 
-# def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
-# normalisation_data=None, static=None):
-#     assert entity in ['Joint', 'Edge']
-#     if entity == 'Joint':
-#         motion2bvh_loc(motion_data, bvh_file_path, parents, type)
-#     else:
-#     motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
+def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
+               normalisation_data=None, static=None):
+    if entity == 'Joint':
+        motion2bvh_loc(motion_data, bvh_file_path, parents, type)
+    else:
+        motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
 def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
@@ -225,7 +224,7 @@ def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):
         one_motion2bvh(motion_data, bvh_file_path, parents=parents[-1], is_openpose=True)
 
 
-def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names=None, expand=True):
+def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names=None, expand=False):
 
     # support non-skel-aware motions with 16 joints
     if one_motion_data.shape[0] == 16:
@@ -235,8 +234,12 @@ def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, na
 
     if expand:
         one_motion_data, parents, names = expand_topology_joints(one_motion_data, is_openpose, parents, names)
-    anim, sorted_order, _ = IK.animation_from_positions(one_motion_data, parents)
+    anim, sorted_order, _ = IK.animation_from_positions(one_motion_data, np.array(parents))
     bvh_file_dir = osp.split(bvh_file_path)[0]
     if not osp.exists(bvh_file_dir):
         os.makedirs(bvh_file_dir)
-    BVH.save(bvh_file_path, anim, names[sorted_order])
+
+    if names:
+        names = names[sorted_order]
+
+    BVH.save(bvh_file_path, anim, names)
