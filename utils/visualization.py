@@ -14,7 +14,7 @@ from utils.data import Joint, Edge
 from utils.data import calc_bone_lengths
 from utils.data import edge_rot_dict_from_edge_motion_data, anim_from_edge_rot_dict
 from utils.data import to_list_4D, un_normalize
-from motion_class import StaticData, DynamicData, anim_from_static
+from motion_class import StaticData, DynamicData
 
 
 FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
@@ -130,11 +130,11 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
     sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
     dynamics = dynamics.sample_frames(sampled_frames)
 
-    anim, names = anim_from_static(static, dynamics[0])
+    anim, names = dynamics[0].anim_from_static()
 
     joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))  # TODO: Change
     for idx, dynamic in enumerate(dynamics):
-        anim, _ = anim_from_static(static, dynamic)
+        anim, _ = dynamic.anim_from_static()
         joints[idx] = Animation.positions_global(anim)
 
     figure_indexes = [list(names).index(joint) for joint in FIGURE_JOINTS]
@@ -159,6 +159,7 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
                 pass  # in some configurations the image cannot be shown
     return fig
 
+
 def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
                normalisation_data=None, static=None):
     if entity == 'Joint':
@@ -168,9 +169,10 @@ def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Join
 
 
 def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
+    # TODO: Static unused variable.
 
     for idx, dynamic in enumerate(dynamics):
-        anim, names = anim_from_static(static, dynamic)
+        anim, names = dynamic.anim_from_static()
 
         # if is_sub_motion:  # TODO: What about a sub motion?
         #     suffix = f'_{dynamic.n_frames}x{dynamic.n_joints}'
