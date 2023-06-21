@@ -14,7 +14,7 @@ from utils.data import Joint, Edge
 from utils.data import calc_bone_lengths
 from utils.data import edge_rot_dict_from_edge_motion_data, anim_from_edge_rot_dict
 from utils.data import to_list_4D, un_normalize
-from motion_class import StaticData, DynamicData, anim_from_static
+from motion_class import StaticData, DynamicData
 
 
 FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
@@ -150,11 +150,11 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
     # print(sampled_frames)  # [ 0 16 32 47 63]
     # dynamics = dynamics.sample_frames(sampled_frames)
 
-    anim, names = anim_from_static(static, dynamics[0])
+    anim, names = dynamics[0].anim_from_static()
 
     joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))  # TODO: Change
     for idx, dynamic in enumerate(dynamics):
-        anim, _ = anim_from_static(static, dynamic)
+        anim, _ = dynamic.anim_from_static()
         joints[idx] = Animation.positions_global(anim)
 
     names = list(names)
@@ -181,19 +181,20 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
                 pass  # in some configurations the image cannot be shown
     return fig
 
-# def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
-# normalisation_data=None, static=None):
-#     assert entity in ['Joint', 'Edge']
-#     if entity == 'Joint':
-#         motion2bvh_loc(motion_data, bvh_file_path, parents, type)
-#     else:
-#     motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
+
+def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
+               normalisation_data=None, static=None):
+    if entity == 'Joint':
+        motion2bvh_loc(motion_data, bvh_file_path, parents, type)
+    else:
+        motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
 
 
 def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
+    # TODO: Static unused variable.
 
     for idx, dynamic in enumerate(dynamics):
-        anim, names = anim_from_static(static, dynamic)
+        anim, names = dynamic.anim_from_static()
 
         # if is_sub_motion:  # TODO: What about a sub motion?
         #     suffix = f'_{dynamic.n_frames}x{dynamic.n_joints}'
@@ -247,7 +248,7 @@ def motion2bvh_loc(motion_data, bvh_file_path, parents=None, type=None):
         one_motion2bvh(motion_data, bvh_file_path, parents=parents[-1], is_openpose=True)
 
 
-def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names=None, expand=True):
+def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, names=None, expand=False):
 
     # support non-skel-aware motions with 16 joints
     if one_motion_data.shape[0] == 16:
@@ -257,8 +258,12 @@ def one_motion2bvh(one_motion_data, bvh_file_path, parents, is_openpose=True, na
 
     if expand:
         one_motion_data, parents, names = expand_topology_joints(one_motion_data, is_openpose, parents, names)
-    anim, sorted_order, _ = IK.animation_from_positions(one_motion_data, parents)
+    anim, sorted_order, _ = IK.animation_from_positions(one_motion_data, np.array(parents))
     bvh_file_dir = osp.split(bvh_file_path)[0]
     if not osp.exists(bvh_file_dir):
         os.makedirs(bvh_file_dir)
-    BVH.save(bvh_file_path, anim, names[sorted_order])
+
+    if names:
+        names = names[sorted_order]
+
+    BVH.save(bvh_file_path, anim, names)

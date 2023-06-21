@@ -3,10 +3,11 @@ import numpy as np
 from models.kinematics import ForwardKinematicsJoint
 
 # from utils.data import foot_names
-from motion_class import StaticData
+# from motion_class import StaticData
+# TODO: Change the location of expand_edges to break the circular import
 
 
-def get_foot_location(motion_data: torch.tensor, static: StaticData, normalisation_data: {}, use_global_position: bool, use_velocity: bool):
+def get_foot_location(motion_data: torch.tensor, static, normalisation_data: {}, use_global_position: bool, use_velocity: bool):
     motion_data = motion_data * normalisation_data['std'][:, :, :motion_data.shape[2]] + \
                   normalisation_data['mean'][:, :, :motion_data.shape[2]]
 

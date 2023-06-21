@@ -37,18 +37,20 @@ def interpolate(args, g_ema, device, mean_latent):
         else:
             W_to = mean_latent
 
-        generated_motion =[None] * num_interp
+        generated_motion = [None] * num_interp
         steps = torch.linspace(0, 1, num_interp, device=device)
 
         for interp_idx in np.arange(num_interp):
             cur_W = W_from.lerp(W_to, steps[interp_idx])
-            generated_motion[interp_idx], _, _ = g_ema(
+            interpolated_motion, _, _ = g_ema(
                 [cur_W],
                 truncation=1,
                 input_is_latent=True
             )
+            generated_motion[interp_idx] = to_cpu(interpolated_motion)
+
         interp_name = 'interp_{}-{}'.format(interp_seeds[0],'mean' if len(interp_seeds)==1 else interp_seeds[-1])
-        generated_motions.append((interp_name,generated_motion))
+        generated_motions.append((interp_name, generated_motion))
 
     return tuple(generated_motions)
 
