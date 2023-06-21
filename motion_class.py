@@ -132,8 +132,8 @@ class EdgePoint(tuple):
 class StaticData:
     def __init__(self, parents: [int], offsets: np.array, names: [str], n_channels=4,
                  enable_global_position=False, enable_foot_contact=False, rotation_representation='quaternion'):
-        self.offsets = offsets
-        self.names = names
+        self._offsets = offsets.copy()
+        self.names = names.copy()
 
         self.parents_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)
         self.skeletal_pooling_dist_1 = [{edge[1]: [e[1] for e in pooling[edge]] for edge in pooling}
@@ -174,6 +174,10 @@ class StaticData:
     @property
     def entire_motion(self) -> np.ndarray:
         raise NotImplementedError
+
+    @property
+    def offsets(self) -> np.ndarray:
+        return self._offsets.copy()
 
     @staticmethod
     def edge_list(parents: [int]) -> [EdgePoint]:
@@ -218,14 +222,17 @@ class StaticData:
         for parents in self.parents_list:
             parents.append(-2)
 
+    @property
+    def foot_names(self):
+        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
+
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
         # feet_names = [LEFT_FOOT_NAME, LEFT_TOE, RIGHT_FOOT_NAME, RIGHT_TOE] if include_toes else [LEFT_FOOT_NAME,
         #                                                                                           RIGHT_FOOT_NAME]
-        feet_names = [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
 
-        foot_indexes = [i for i, name in enumerate(self.names) if name in feet_names]
-        all_foot_indexes = [foot_indexes]
+        indexes = [i for i, name in enumerate(self.names) if name in self.foot_names]
+        all_foot_indexes = [indexes]
         for pooling in self.skeletal_pooling_dist_1[::-1]:
             all_foot_indexes += [[k for k in pooling if any(foot in pooling[k] for foot in all_foot_indexes[-1])]]
 
@@ -463,7 +470,7 @@ class DynamicData:
 
         self.assert_shape_is_right()
 
-        self.use_velocity = True
+        self.use_velocity = False  # TODO: Why do we need this flag?
 
     def assert_shape_is_right(self):
         assert self.motion.shape[-2] == len(self.static.parents_list[-1])
@@ -486,7 +493,26 @@ class DynamicData:
                             enable_foot_contact=enable_foot_contact,
                             rotation_representation=rotation_representation)
 
-        return cls(animation.rotations.qs,static)
+        return cls(animation.rotations.qs, static)
+
+    @classmethod
+    def init_from_edge_rot_dict(cls, motion):
+        offsets = np.concatenate([motion['offset_root'][np.newaxis, :], motion['offsets_no_root']])
+        static = StaticData(motion['parents_with_root'], offsets, motion['names_with_root'],
+                            enable_global_position=True)
+
+        pos_root = motion['pos_root'] - motion['pos_root'][:1, :]  # Center to (0,0,0)
+
+        dim_delta = static.n_channels - pos_root.shape[-1]  # TODO: If not quaternion...
+        padding = np.zeros((pos_root.shape[0], dim_delta))  # Pad to 4D quaternions.
+        pos_root = np.concatenate([pos_root, padding], axis=1)
+
+        rotations = np.concatenate([motion['rot_root'][:, np.newaxis],
+                                    motion['rot_edge_no_root'],
+                                    pos_root[:, np.newaxis, :]], axis=1)
+        rotations = torch.from_numpy(rotations).transpose(0, 2)
+
+        return static, cls(rotations, static)
 
     def __iter__(self):
         if self.motion.ndim == 4:
@@ -519,14 +545,15 @@ class DynamicData:
         return self.motion[..., :self.n_joints, :]
         # Return only joints representing motion, maybe having a batch dim
 
-    @property
     def foot_contact(self) -> torch.tensor:
-        raise NotImplementedError
+        return [[{foot: motion[0, self.n_joints + 1 + idx, frame].numpy().item()
+                for idx, foot in enumerate(self.static.foot_names)} for frame in range(self.n_frames)]
+                for motion in self.motion]
 
     @property
     def root_location(self) -> torch.tensor:
         location = self.motion[..., :3, self.n_joints, :]  # drop the 4th item in the position tensor
-        location = np.cumsum(location, axis=1) if self.use_velocity else location
+        # location = np.cumsum(location, axis=1) if self.use_velocity else location
 
         return location  # K x T
 
@@ -612,13 +639,11 @@ def expand_topology_edges2(anim, req_joint_idx=None, names=None, offset_len_mean
 
 def basic_anim_from_static(static: StaticData, dynamic: DynamicData):
     offsets = static.offsets
-    offsets[0, :] = 0
 
     positions = np.repeat(offsets[np.newaxis], dynamic.n_frames, axis=0)
     positions[:, 0] = dynamic.root_location.transpose(0, 1)
 
     orients = Quaternions.id(dynamic.n_joints)
-
     rotations = Quaternions(dynamic.edge_rotations.permute(2, 1, 0).numpy())
 
     if rotations.shape[-1] == 6:  # repr6d
@@ -641,7 +666,7 @@ def anim_from_static(static: StaticData, dynamic: DynamicData):
     # expand joints TODO: We dont need 2 methods
     anim_exp, _, names_exp, _ = expand_topology_edges2(anim_edges, names=static.names, nearest_joint_ratio=1)
 
-    # move rotation values to parents because of the expendings.
+    # move rotation values to parents because of the expending.
     children_all_joints = children_list(anim_exp.parents)
     for idx, children_one_joint in enumerate(children_all_joints[1:]):
         parent_idx = idx + 1

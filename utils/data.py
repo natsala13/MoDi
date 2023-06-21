@@ -773,8 +773,9 @@ def motion_from_raw(args, motion_data_raw, static):
         edge_rot_dict_general['mean'] = mean_joints.transpose(0, 2, 1, 3)
         edge_rot_dict_general['std'] = std_joints.transpose(0, 2, 1, 3)
 
-        edge_rot_dict_general['mean_tensor'] = torch.tensor(edge_rot_dict_general['mean'], dtype=torch.float32).cuda()
-        edge_rot_dict_general['std_tensor'] = torch.tensor(edge_rot_dict_general['std'], dtype=torch.float32).cuda()
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        edge_rot_dict_general['mean_tensor'] = torch.tensor(edge_rot_dict_general['mean'], dtype=torch.float32).to(device)
+        edge_rot_dict_general['std_tensor'] = torch.tensor(edge_rot_dict_general['std'], dtype=torch.float32).to(device)
 
     # motion_data = motion_data[:1,...]; assert args.batch == 1; print('*********\nOVERFITTING!!!\n******') # overfit over one sample only
 
