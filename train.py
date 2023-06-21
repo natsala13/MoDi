@@ -195,7 +195,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
 
     pbar = range(args.start_iter, args.iter)
     if get_rank() == 0 and not args.on_cluster_training:
-        pbar = tqdm(pbar, initial=args.start_iter, dynamic_ncols=False, smoothing=0.01, ncols=150)
+        pbar = tqdm(pbar, initial=args.start_iter, total=args.iter, dynamic_ncols=False, smoothing=0.01, ncols=150)
 
     mean_path_length = 0
     d_loss_val = 0

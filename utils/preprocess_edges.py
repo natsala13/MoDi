@@ -230,7 +230,7 @@ def get_animation_names(char, data_root):
         n_anim = 10
     else:
         n_anim = len(animation_names)
-    animation_names = animation_names[:n_anim]
+    animation_names = animation_names[:n_anim]  # DEBUG : [512:516]
     return animation_names, char_dir
 
 
@@ -398,13 +398,13 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
             ###
             # expand topology: add dummy vertices where a joint has more than one child
             # ###
-            # anim_original_debug = copy.deepcopy(anim_input)
-            # idx_req_in_input_debug = copy.deepcopy(idx_req_in_input)
-            #
-            # anim_input, idx_req_in_input, names_input_fixed, offset_len_mean = \
-            #     expand_topology_edges(anim_input, idx_req_in_input, names_input_fixed, offset_len_mean, nearest_joint_ratio=1)
-            # sanity_check_expand_topology(anim_original_debug, anim_input, anim_file_path, frametime, idx_req_in_input_debug,
-            #                              names_input_fixed, names_req_in_input)
+            anim_original_debug = copy.deepcopy(anim_input)
+            idx_req_in_input_debug = copy.deepcopy(idx_req_in_input)
+
+            anim_input, idx_req_in_input, names_input_fixed, offset_len_mean = \
+                expand_topology_edges(anim_input, idx_req_in_input, names_input_fixed, offset_len_mean, nearest_joint_ratio=1)
+            sanity_check_expand_topology(anim_original_debug, anim_input, anim_file_path, frametime, idx_req_in_input_debug,
+                                         names_input_fixed, names_req_in_input)
 
             ###
             # remove joints that are not required for the algorithm
