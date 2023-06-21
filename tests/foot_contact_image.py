@@ -10,7 +10,7 @@ from Motion import BVH
 from utils.data import motion_from_raw
 from utils.visualization import motion2fig
 from utils.data import anim_from_edge_rot_dict
-from motion_class import StaticData, DynamicData, anim_from_static
+from motion_class import StaticData, DynamicData
 
 JASPER_DB = 'data/edge_rot_data.npy'
 MAW_DB = 'data/edge_rot_maw.npy'
@@ -125,7 +125,7 @@ def foot_height_graph(dynamics, static):
 def test_bvh_from_edge_rot():
     motion = np.load('tmp/maw_debug_after.npy', allow_pickle=True).item()
     static, dynamic = DynamicData.init_from_edge_rot_dict(motion)
-    anim, names = anim_from_static(static, dynamic)
+    anim, names = dynamic.anim_from_static()
 
     BVH.save(f'./tmp/maw_debug_after.bvh', anim, names)
 
