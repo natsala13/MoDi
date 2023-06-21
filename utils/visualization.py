@@ -22,7 +22,7 @@ FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftA
                  'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
 
 
-def pose2im_all(all_peaks, H=512, W=512):
+def pose2im_all(all_peaks, H=512, W=512, foot_contact_info=None):
     limbSeq = [[1, 2], [2, 3], [3, 4],                       # right arm
                [1, 5], [5, 6], [6, 7],                       # left arm
                [8, 9], [9, 10], [10, 11],                    # right leg
@@ -45,7 +45,7 @@ def pose2im_all(all_peaks, H=512, W=512):
                     [255, 170, 0], [255, 85, 0], [255, 0, 0],
                     ]
 
-    image = pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W)
+    image = pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, foot_contact_info=foot_contact_info)
     return image
 
 
@@ -73,13 +73,24 @@ def stretch(data, H, W):
     return data
 
 
-def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W, _circle=True, _limb=True, imtype=np.uint8):
+def pose2im(all_peaks, limbSeq, limb_colors, joint_colors, H, W,
+            _circle=True, _limb=True, imtype=np.uint8, foot_contact_info=None):
     canvas = np.zeros(shape=(H, W, 3))
     canvas.fill(255)
 
     if _circle:
         for i in range(len(joint_colors)):
             cv2.circle(canvas, (int(all_peaks[i][0]), int(all_peaks[i][1])), 2, joint_colors[i], thickness=2)
+
+    if foot_contact_info:
+        for foot_idx in foot_contact_info:
+            if foot_contact_info[foot_idx] > 0.5:
+                thickness = -1
+            else:
+                thickness = 2
+
+            cv2.circle(canvas, center=(int(all_peaks[foot_idx][0]), int(all_peaks[foot_idx][1])), radius=20,
+                       color=(0, 0, 0), thickness=thickness)
 
     if _limb:
         stickwidth = 2
@@ -124,11 +135,20 @@ def motion2fig_1_motion_3_angles(data, H=512, W=512):
     return fig
 
 
+def foot_info(dynamics: DynamicData):
+    foot_contact_info = [[{FIGURE_JOINTS.index(foot_name): frame[foot_name] for foot_name in frame}
+                          for frame in motion]
+                         for motion in dynamics.foot_contact()]
+
+    return foot_contact_info
+
+
 def motion2fig(static: StaticData, dynamics: DynamicData,
                height=512, width=512, n_sampled_motions=5, n_sampled_frames=5):
-    n_sampled_motions = min(n_sampled_motions, dynamics.n_frames, 10)
-    sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
-    dynamics = dynamics.sample_frames(sampled_frames)
+    # n_sampled_motions = min(n_sampled_motions, dynamics.n_frames, 10)
+    # sampled_frames = np.linspace(0, dynamics.n_frames-1, n_sampled_frames).round().astype(int)
+    # print(sampled_frames)  # [ 0 16 32 47 63]
+    # dynamics = dynamics.sample_frames(sampled_frames)
 
     anim, names = anim_from_static(static, dynamics[0])
 
@@ -137,7 +157,9 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
         anim, _ = anim_from_static(static, dynamic)
         joints[idx] = Animation.positions_global(anim)
 
-    figure_indexes = [list(names).index(joint) for joint in FIGURE_JOINTS]
+    names = list(names)
+    figure_indexes = [names.index(joint) for joint in FIGURE_JOINTS]
+    foot_contact_info = foot_info(dynamics)
 
     data = joints[..., figure_indexes, :2]  # b x T x J x 4 -> acesss only the xy projection from K
     data = data.transpose(0, 2, 3, 1)  # samples x frames x joints x features ==> samples x joints x features x frames
@@ -151,7 +173,7 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
     for motion_idx in np.arange(n_sampled_motions):
         for frame_idx in np.arange(n_sampled_frames):
             skeleton = data[motion_idx, :, :, frame_idx]
-            img = pose2im_all(skeleton, max_h, max_w)
+            img = pose2im_all(skeleton, max_h, max_w, foot_contact_info=foot_contact_info[motion_idx][frame_idx])
             axes[motion_idx, frame_idx].axis('off')
             try:
                 axes[motion_idx, frame_idx].imshow(img[::-1, :])  # image y axis is inverted

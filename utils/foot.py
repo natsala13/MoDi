@@ -13,12 +13,13 @@ def get_foot_location(motion_data: torch.tensor, static: StaticData, normalisati
     n_motions, _, _, n_frames = motion_data.shape
     data_dtype = motion_data.dtype
 
-    # fk class must have root at index 0  TODO: Its kinda default...
+    # fk class must have root at index 0
     offsets = np.repeat(static.offsets[np.newaxis], n_motions, axis=0)
     offsets = torch.from_numpy(offsets).to(motion_data.device).type(data_dtype)
     fk = ForwardKinematicsJoint(static.parents, offsets)
-    motion_for_fk = motion_data.transpose(1,
-                                          3)  # samples x features x joints x frames  ==>  samples x frames x joints x features
+    motion_for_fk = motion_data.transpose(1, 3)
+    # samples x features x joints x frames  ==>  samples x frames x joints x features
+
     if use_global_position:
         #  last 'joint' is global position. use only first 3 features out of it.
         glob_pos = motion_for_fk[:, :, -1, :3]
@@ -34,6 +35,9 @@ def get_foot_location(motion_data: torch.tensor, static: StaticData, normalisati
     foot_indexes = static.foot_indexes(include_toes=True)[-1]
     foot_location = joint_location[:, :, foot_indexes]
 
+    # up_joints = joint_location[..., 1]
+    # res = torch.sort(up_joints.reshape(-1))[0]
+
     return foot_location, foot_indexes, offsets
 
 
@@ -42,7 +46,6 @@ def get_foot_contact(motion_data, static, normalisation_data, use_global_positio
     n_motions, _, _, n_frames = motion_data.shape
     foot_location, foot_indexes, offsets = get_foot_location(motion_data, static, normalisation_data,
                                                              use_global_position, use_velocity)
-    # Duplication up to here..
 
     foot_up_location = foot_location[..., axis_up]
     shin_len = offsets[0, foot_indexes].pow(2).sum(axis=-1).sqrt()
@@ -53,6 +56,8 @@ def get_foot_contact(motion_data, static, normalisation_data, use_global_positio
     floor_height = torch.mean(foot_location_sorted[:percentile_20], axis=0)
     height_threshold = floor_height + 0.2 * shin_len
     foot_contact = (foot_up_location < height_threshold).type(motion_data.dtype)
+
+    ##### OVERRIDE #####
     foot_contact = torch.ones_like(foot_contact)
     # Euclidian distance between foot 3D loc now and 2 frames ago
     foot_velocity = (foot_location[:, 2:] - foot_location[:, 0:-2]).pow(2).sum(axis=-1).sqrt()
