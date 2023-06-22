@@ -40,8 +40,8 @@ class TrainBaseOptions(BaseOptions):
         parser.add_argument("--augment_p", type=float, default=0,
                             help="probability of applying augmentation. 0 = use adaptive augmentation")
         parser.add_argument("--action_recog_model", type=str,
-                            default='evaluation/checkpoint_0300_mixamo_acc_0.74_train_test_split_smaller_arch.tar',
                             help="pretrained action recognition model used for feature extraction when computing evaluation metrics FID, KID, diversity")
+        # default='evaluation/checkpoint_0300_mixamo_acc_0.74_train_test_split_smaller_arch.tar',
 
 
 class TrainOptions(TrainBaseOptions):
