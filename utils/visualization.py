@@ -19,7 +19,7 @@ from motion_class import StaticData, DynamicData
 
 FIGURE_JOINTS = ['Head', 'Neck', 'RightArm', 'RightForeArm', 'RightHand', 'LeftArm',
                  'LeftForeArm', 'LeftHand', 'Hips', 'RightUpLeg', 'RightLeg',
-                 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
+                 'RightToeBase', 'LeftUpLeg', 'LeftLeg', 'LeftToeBase']
 
 
 def pose2im_all(all_peaks, H=512, W=512, foot_contact_info=None):

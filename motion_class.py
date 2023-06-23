@@ -205,7 +205,7 @@ class StaticData:
 
     @property
     def foot_names(self):
-        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
+        return [LEFT_TOE, RIGHT_TOE]
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
@@ -445,13 +445,13 @@ class StaticData:
 
 
 class DynamicData:
-    def __init__(self, motion: torch.tensor, static: StaticData):
+    def __init__(self, motion: torch.tensor, static: StaticData, use_velocity=False):
         self.motion = motion.clone()  # Shape is B  x K x J x T = batch x channels x joints x frames
         self.static = static
 
         self.assert_shape_is_right()
 
-        self.use_velocity = False  # TODO: Why do we need this flag?
+        self.use_velocity = use_velocity
 
     def assert_shape_is_right(self):
         assert self.motion.shape[-2] == len(self.static.parents_list[-1])
@@ -465,6 +465,7 @@ class DynamicData:
     def init_from_bvh(cls, bvf_filepath: str,
                       enable_global_position=False,
                       enable_foot_contact=False,
+                      use_velocity=False,
                       rotation_representation='quaternion'):
 
         animation, names, frametime = BVH.load(bvf_filepath)
@@ -474,10 +475,10 @@ class DynamicData:
                             enable_foot_contact=enable_foot_contact,
                             rotation_representation=rotation_representation)
 
-        return cls(animation.rotations.qs, static)
+        return cls(animation.rotations.qs, static, use_velocity=use_velocity)
 
     @classmethod
-    def init_from_edge_rot_dict(cls, motion):
+    def init_from_edge_rot_dict(cls, motion, use_velocity=False):
         static = StaticData.init_from_edge_rot(motion, enable_global_position=True)
 
         pos_root = motion['pos_root'] - motion['pos_root'][:1, :]  # Center to (0,0,0)
@@ -490,17 +491,20 @@ class DynamicData:
                                     pos_root[:, np.newaxis, :]], axis=1)
         rotations = torch.from_numpy(rotations).transpose(0, 2)
 
-        return static, cls(rotations, static)
+        return static, cls(rotations, static, use_velocity=use_velocity)
+
+    def sub_motion(self, motion):
+        return DynamicData(motion, self.static, use_velocity=self.use_velocity)
 
     def __iter__(self):
         if self.motion.ndim == 4:
-            return (DynamicData(motion, self.static) for motion in self.motion).__iter__()
+            return (self.sub_motion(motion) for motion in self.motion).__iter__()
         elif self.motion.ndim == 3:
-            return [DynamicData(self.motion, self.static)].__iter__()
+            return [self.sub_motion(self.motion)].__iter__()
 
     def __getitem__(self, slice_val):
         # TODO: Maybe make sure that the slice doesnt cut out joints or channels?
-        return DynamicData(self.motion[slice_val], self.static)
+        return self.sub_motion(self.motion[slice_val])
 
     @property
     def shape(self):
@@ -531,15 +535,15 @@ class DynamicData:
     @property
     def root_location(self) -> torch.tensor:
         location = self.motion[..., :3, self.n_joints, :]  # drop the 4th item in the position tensor
-        # location = np.cumsum(location, axis=1) if self.use_velocity else location
+        location = np.cumsum(location, axis=1) if self.use_velocity else location
 
         return location  # K x T
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
-        return DynamicData(self.motion * std + mean, self.static)
+        return self.sub_motion(self.motion * std + mean)
 
     def sample_frames(self, frames_indexes: [int]):
-        return DynamicData(self.motion[..., frames_indexes], self.static)
+        return self.sub_motion(self.motion[..., frames_indexes])
 
     def basic_anim(self):
         offsets = self.static.offsets
