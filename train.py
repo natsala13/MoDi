@@ -146,7 +146,24 @@ def g_foot_contact_loss_v2(motion, static: StaticData, normalisation_data, globa
 
     predicted_foot_contact = motion[:, 0, label_idx:]
     predicted_foot_contact = sigmoid_for_contact(predicted_foot_contact)
-    return (predicted_foot_contact[..., 1:] * velo).mean()
+    loss = (predicted_foot_contact[..., 1:] * velo)
+
+    # sample = 0
+    # import ipdb;ipdb.set_trace()
+    #
+    # plt.figure()
+    # plt.plot(predicted_foot_contact[sample].transpose(0, 1).detach().cpu().numpy())
+    # plt.title('foot contact prediction')
+    # plt.savefig('fc/train_foot_contact')
+    #
+    # plt.figure()
+    # plt.plot(loss[sample].transpose(0, 1).detach().cpu().numpy())
+    # plt.title('foot contact loss v2 for debug motion')
+    # plt.savefig('fc/train_foot_loss')
+    #
+    # velo = get_foot_velo(motion[:, :, :label_idx], static, normalisation_data, global_position, use_velocity)
+
+    return loss.mean()
 
 
 def g_encourage_contact(motion):
@@ -392,7 +409,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     logger.report_media(title='Animation', series='Predicted Motion', iteration=i,
                                         local_path=motion_path)
 
-                dynamics = DynamicData(fake_img.detach().cpu(), static)
+                dynamics = DynamicData(fake_img.detach().cpu(), static, use_velocity=use_velocity)
                 dynamics = dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
 
                 if args.entity == 'Joint':

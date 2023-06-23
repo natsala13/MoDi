@@ -218,7 +218,7 @@ def generate(args, g_ema: Generator, device, mean_joints: torch.tensor, std_join
         n_motions = min(10, len(motion_np))
 
         motion_batch = torch.tensor([motion[0] for motion in motion_np]).permute(0, 2, 1, 3)
-        dynamics = DynamicData(motion_batch, static)
+        dynamics = DynamicData(motion_batch, static, use_velocity=True)
         dynamics = dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
         fig = motion2fig(static, dynamics)
 
