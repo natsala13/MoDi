@@ -122,9 +122,6 @@ class StaticData:
         self.skeletal_pooling_dist_0 = [{edge[1]: [pooling[edge][-1][1]] for edge in pooling}
                                         for pooling in self.skeletal_pooling_dist_1_edges]
 
-        # self.skeletal_pooling_dist_0_edges = None
-        # self.edges_list = None  # TODO: I dont think I need those 2 varianles anymore...
-
         # Configurations
         self.__n_channels = n_channels
 
@@ -168,7 +165,7 @@ class StaticData:
     def n_channels(self) -> int:
         return self.__n_channels
 
-    def _enable_repr6d(self):  # TODO: Instead of using this function, just create the Static data with configuration.
+    def _enable_repr6d(self):
         self.__n_channels = 6
 
     def _enable_marker4(self):
@@ -186,12 +183,11 @@ class StaticData:
 
     def _enable_global_position(self):
         """
-        TODO: Maybe try and remove that edge?
         add a special entity that would be the global position.
         The entity is appended to the edges list.
-        No need to really add it in edges_list and all the other structures that are based on tupples. We add it only
+        No need to really add it in edges_list and all the other structures that are based on tuples. We add it only
         to the structures that are based on indices.
-        Its neighboring edges are the same as the neightbors of root """
+        Its neighboring edges are the same as the neighbors of root """
         assert self.parents_list[0][-1] != -2
 
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
@@ -205,7 +201,7 @@ class StaticData:
 
     @property
     def foot_names(self):
-        return [LEFT_TOE, RIGHT_TOE]
+        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
@@ -318,7 +314,6 @@ class StaticData:
         all_sequences = StaticData._find_seq(0, degree, parents)
         edges_sequences = [StaticData._edges_from_joints(seq) for seq in all_sequences]
 
-        # TODO: Lets keep it to parent lists - I am not sure I want this.
         pooling = [{(edge[0][0], edge[-1][-1]): edge for edge in StaticData._pooling_for_edges_list(edges)} for edges in
                    edges_sequences]
         pooling = StaticData.flatten_dict(pooling)
@@ -383,7 +378,6 @@ class StaticData:
 
             degree = StaticData._topology_degree(all_parents[-1])
 
-        # TODO: make pooling after primal skeleton automatic.
         # all_parents += [[-1, 0, 1], [-1]]
         # all_poolings += [{(-1, 0): [(-1, 0)], (0, 1): [(0, 1), (0, 5), (0, 6)], (1, 2): [(1, 2), (1, 3), (1, 4)]},
         #                  {(-1, 0): [(-1, 0), (0, 1), (1, 2)]}]

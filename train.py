@@ -418,7 +418,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     motion2bvh_rot(static, dynamics[0], motion_path)
                     fig = motion2fig(static, dynamics[:5])
 
-                    fig_path = osp.join(images_output_folder, 'fake_motion_{}.png'.format(i))
+                    fig_path = osp.join(images_output_folder, f'fake_motion_{str(i).zfill(6)}.png')
                     fig.savefig(fig_path, dpi=300, bbox_inches='tight')
                     plt.close()  # close figure
 
@@ -477,7 +477,8 @@ def main(args_not_parsed):
     traits_class = setup_env(args, get_traits=True)
 
     if args.clearml:
-        output_folder = osp.expanduser('~/train_outputs')
+        # output_folder = osp.expanduser('~/train_outputs')
+        output_folder = './clearml_outputs'
         os.makedirs(output_folder, exist_ok=True)
 
         task = Task.init(project_name='stylegan2_motion_skeleton',
@@ -539,7 +540,7 @@ def main(args_not_parsed):
                             enable_foot_contact=args.foot,
                             rotation_representation=args.rotation_repr)
 
-    if args.foot:  # TODO: Why is that?
+    if args.foot:
         args.axis_up = 1
 
     generator = Generator(
