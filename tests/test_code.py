@@ -397,6 +397,7 @@ tmp_save_path = 'tmp_test_data'
 # paths on dan5
 ckpt = './checkpoints/trained_model_80k.pt'
 edge_rot_data_path = './data/edge_rot_data.npy'
+joint_data_path = './data/joint_loc_data.npy'
 act_rec_gt_path = '/home/dcor/datasets/motion/mixamo/npy/all_bin_30_fps/motion.npy'
 
 # ckpt = '/disk2/inball1/trains_outputs/Jasper_all_5K_norm_mixing_0p9_pool_edgerot_deep_globpos_footvelo_shab3e.09076a85e4644b8fb6c1550bc6679d11/models/079999.pt'
@@ -435,6 +436,18 @@ class SuccessfullyRunAllMainsTest(unittest.TestCase):
         params = ['--path', edge_rot_data_path, '--mixing', '0.9', '--batch', '16', '--skeleton',
                   '--conv3', '--entity', 'Edge', '--glob_pos', '--foot', '--act_rec_gt_path',
                   act_rec_gt_path, '--iter', '2', '--v2_contact_loss', '--report_every', '2', '--model_save_path',
+                  f'utils/{tmp_save_path}']
+        train.main(params)
+
+    def test_train_runs_successfully_joint(self):
+        params = ['--path', joint_data_path, '--mixing', '0.9', '--batch', '16', '--skeleton',
+                  '--entity', 'Joint', '--iter', '2', '--report_every', '2', '--model_save_path',
+                  f'utils/{tmp_save_path}']
+        train.main(params)
+
+    def test_train_runs_successfully_joint_no_skeleton(self):
+        params = ['--path', joint_data_path, '--mixing', '0.9', '--batch', '16',
+                  '--entity', 'Joint', '--iter', '2', '--report_every', '2', '--model_save_path',
                   f'utils/{tmp_save_path}']
         train.main(params)
 
