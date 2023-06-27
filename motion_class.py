@@ -201,7 +201,8 @@ class StaticData:
 
     @property
     def foot_names(self):
-        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME]
+        # return [LEFT_TOE, RIGHT_TOE]
+        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME, LEFT_TOE, RIGHT_TOE]
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
@@ -532,6 +533,13 @@ class DynamicData:
         location = np.cumsum(location, axis=1) if self.use_velocity else location
 
         return location  # K x T
+
+    def foot_movement_index(self) -> float:
+        """ calculate the amount of foot movement."""
+        foot_location = self.motion[..., self.static.foot_indexes()[-1], :]  # B x K x feet x T
+        foot_velocity = ((foot_location[..., 1:] - foot_location[..., :-1]) ** 2).sum(axis=1)  # B x feet x T
+
+        return foot_velocity.sum(axis=1).sum(axis=1)
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
         return self.sub_motion(self.motion * std + mean)

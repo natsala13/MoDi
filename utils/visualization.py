@@ -136,7 +136,7 @@ def motion2fig_1_motion_3_angles(data, H=512, W=512):
 
 
 def foot_info(dynamics: DynamicData):
-    foot_contact_info = [[{FIGURE_JOINTS.index(foot_name): frame[foot_name] for foot_name in frame}
+    foot_contact_info = [[{FIGURE_JOINTS.index(foot_name): frame[foot_name] for foot_name in frame if foot_name in FIGURE_JOINTS}
                           for frame in motion]
                          for motion in dynamics.foot_contact()]
 
