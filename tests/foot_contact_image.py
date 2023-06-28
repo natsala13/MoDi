@@ -156,7 +156,7 @@ def test_save_bvh_debug(motion_db, debug_motion):
     anim, names = anim_from_edge_rot_dict(motion)
 
     print(f'saving motion {debug_motion}...')
-    BVH.save(f'./tmp/debug_motion_{debug_motion}.bvh', anim, names)
+    BVH.save(f'./tmp/debug_motion_edge_{debug_motion}.bvh', anim, names)
 
 
 def test_save_bvh_from_static_debug(static, dynamics, random_samples):
@@ -164,7 +164,7 @@ def test_save_bvh_from_static_debug(static, dynamics, random_samples):
     anim, names = dynamic.anim_from_static()
 
     print(f'saving motion {random_samples[DEBUG_MOTION_INDEX]}...')
-    BVH.save(f'./tmp/debug_motion_{random_samples[DEBUG_MOTION_INDEX]}.bvh', anim, names)
+    BVH.save(f'./tmp/debug_motion_static_{random_samples[DEBUG_MOTION_INDEX]}.bvh', anim, names)
 
 
 def test_plot_dynamics_debug(dynamics_debug, static):

@@ -63,7 +63,6 @@ def dynamic(static, motion):
 
 @pytest.fixture(scope='session')
 def normalisation_data(metadata):
-    import ipdb;ipdb.set_trace()
     return {'std': metadata['std'].transpose(1, 2, 0, 3),
             'mean': metadata['mean'].transpose(1, 2, 0, 3),
             'parents_with_root': metadata['parents_with_root']}
