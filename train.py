@@ -148,21 +148,6 @@ def g_foot_contact_loss_v2(motion, static: StaticData, normalisation_data, globa
     predicted_foot_contact = sigmoid_for_contact(predicted_foot_contact)
     loss = (predicted_foot_contact[..., 1:] * velo)
 
-    # sample = 0
-    # import ipdb;ipdb.set_trace()
-    #
-    # plt.figure()
-    # plt.plot(predicted_foot_contact[sample].transpose(0, 1).detach().cpu().numpy())
-    # plt.title('foot contact prediction')
-    # plt.savefig('fc/train_foot_contact')
-    #
-    # plt.figure()
-    # plt.plot(loss[sample].transpose(0, 1).detach().cpu().numpy())
-    # plt.title('foot contact loss v2 for debug motion')
-    # plt.savefig('fc/train_foot_loss')
-    #
-    # velo = get_foot_velo(motion[:, :, :label_idx], static, normalisation_data, global_position, use_velocity)
-
     return loss.mean()
 
 
