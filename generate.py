@@ -236,7 +236,7 @@ def generate(args, g_ema: Generator, device, mean_joints: torch.tensor, std_join
                 cluster_label = torch.argmax(cluster_label).item()
                 id = f'g{cluster_label:02d}_{id}'
 
-            motion2bvh_rot(static, dynamics[i], osp.join(out_path, f'{prefix}_{id}.bvh'))
+            motion2bvh_rot(dynamics[i], osp.join(out_path, f'{prefix}_{id}.bvh'))
 
     # save args
     pd.Series(args.__dict__).to_csv(osp.join(root_out_path, 'args.csv'), sep='\t', header=None)

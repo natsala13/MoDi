@@ -400,7 +400,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 if args.entity == 'Joint':
                     motion2bvh_loc(dynamics[0].motion.numpy().transpose(1, 0, 2), motion_path, static.parents_list)
                 else:
-                    motion2bvh_rot(static, dynamics[0], motion_path)
+                    motion2bvh_rot(dynamics[0], motion_path)
                     fig = motion2fig(static, dynamics[:5])
 
                     fig_path = osp.join(images_output_folder, f'fake_motion_{str(i).zfill(6)}.png')

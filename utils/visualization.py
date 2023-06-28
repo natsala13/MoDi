@@ -152,7 +152,7 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
 
     anim, names = dynamics[0].anim_from_static()
 
-    joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))  # TODO: Change
+    joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))
     for idx, dynamic in enumerate(dynamics):
         anim, _ = dynamic.anim_from_static()
         joints[idx] = Animation.positions_global(anim)
@@ -182,17 +182,7 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
     return fig
 
 
-def motion2bvh(motion_data, bvh_file_path, parents=None, type=None, entity='Joint',
-               normalisation_data=None, static=None):
-    if entity == 'Joint':
-        motion2bvh_loc(motion_data, bvh_file_path, parents, type)
-    else:
-        motion2bvh_rot(motion_data, bvh_file_path, normalisation_data=normalisation_data, static=static)
-
-
-def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
-    # TODO: Static unused variable.
-
+def motion2bvh_rot(dynamics: DynamicData, bvh_file_path):
     for idx, dynamic in enumerate(dynamics):
         anim, names = dynamic.anim_from_static()
 

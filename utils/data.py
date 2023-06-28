@@ -629,7 +629,7 @@ def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dic
         motion = motion_data[hierarchy_level]
         motion_tr = motion[0].transpose(2, 0, 1)  # edges x features x frames ==> frames x edges x features
         n_frames = motion_tr.shape[0]
-        n_edges = motion_tr.shape[1]  # TODO: Take those info from static data.
+        n_edges = motion_tr.shape[1]
 
         frame_mults[hierarchy_level] = int(n_frames_max / n_frames)  # Whats that?
         if type in ['sample', 'interp-mix-pyramid'] and n_edges != Edge.n_edges[-1]:

@@ -42,7 +42,7 @@
     -> during pooling root position and feet contact remain (almost) independent
     -> during convolution both are neigbhoor of something,... to check.
 
-### TODO: Steps
+#### TODO: Steps
 [v] stop using edges -> move to parents lists. DONE (I still save edges for simplicity...)
 [v] update git.
 [v] add root position.
@@ -53,7 +53,7 @@
 [v] Create dynamic class.
 [X] Neighbors list
 [X] Remove root position and foot contact.
-[ ] Dynamic class - use velocity flag
+[v] Dynamic class - use velocity flag
 [X] Remove expand topology
 [x] generate function exist both in generate and in evaluate.
 [v] Stop with default None values.
@@ -496,7 +496,6 @@ class DynamicData:
             return [self.sub_motion(self.motion)].__iter__()
 
     def __getitem__(self, slice_val):
-        # TODO: Maybe make sure that the slice doesnt cut out joints or channels?
         return self.sub_motion(self.motion[slice_val])
 
     @property

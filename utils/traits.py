@@ -420,8 +420,8 @@ class SkeletonAwareFastConvTraits(SkeletonAwareConv3DTraits):
     def reshape_input_before_conv(self, inputs, batch, width):
         return inputs
 
-    def reshape_output_after_conv(self, output):  # TODO: Rewrite - I cannot know exact height and out_channels values
+    def reshape_output_after_conv(self, output):
         return output
 
-    def flip_if_needed(self, weight):  # TODO: Rewrite
-        return weight  # flip nessecary only in transposed conv.
+    def flip_if_needed(self, weight):
+        return weight  # flip necessary only in transposed conv.
