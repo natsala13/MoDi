@@ -86,6 +86,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from Motion import BVH
+from utils.foot import get_foot_location
 from Motion.Animation import Animation
 from Motion.Quaternions import Quaternions
 from utils.data import expand_topology_edges
@@ -489,7 +490,7 @@ class DynamicData:
         return static, cls(rotations, static, use_velocity=use_velocity)
 
     def sub_motion(self, motion):
-        return DynamicData(motion, self.static, use_velocity=self.use_velocity)
+        return self.__class__(motion, self.static, use_velocity=self.use_velocity)
 
     def __iter__(self):
         if self.motion.ndim == 4:
@@ -533,13 +534,6 @@ class DynamicData:
         location = np.cumsum(location, axis=1) if self.use_velocity else location
 
         return location  # K x T
-
-    def foot_movement_index(self) -> float:
-        """ calculate the amount of foot movement."""
-        foot_location = self.motion[..., self.static.foot_indexes()[-1], :]  # B x K x feet x T
-        foot_velocity = ((foot_location[..., 1:] - foot_location[..., :-1]) ** 2).sum(axis=1)  # B x feet x T
-
-        return foot_velocity.sum(axis=1).sum(axis=1)
 
     def normalise(self, mean: torch.tensor, std: torch.tensor):
         return self.sub_motion(self.motion * std + mean)
@@ -589,3 +583,82 @@ class DynamicData:
         anim_exp = self.move_rotation_values_to_parents(anim_exp)
 
         return anim_exp, names_exp
+
+
+def plot(name):
+    def decorator(plot_method):
+        def wrapper(self, *args, **kwargs):
+            plt.figure()
+            plot_method(self, *args, **kwargs)
+            plt.title(name)
+            plt.savefig(f'fc/train_{name.replace(" ", "_")}')
+        return wrapper
+    return decorator
+
+
+class DebugDynamic(DynamicData):
+    @property
+    def foot_location(self):
+        label_idx = self.n_joints + self.static.enable_global_position
+        location, _, _ = get_foot_location(self.motion[:, :, :label_idx], self.static,
+                                           use_global_position=self.static.enable_global_position,
+                                           use_velocity=self.use_velocity)
+
+        return location
+
+    @property
+    def foot_velocity(self):
+        return (self.foot_location[:, 1:] - self.foot_location[:, :-1]).pow(2).sum(axis=-1).sqrt()
+
+    @property
+    def predicted_foot_contact(self):
+        label_idx = self.n_joints + self.static.enable_global_position
+        predicted_foot_contact = self.motion[..., 0, label_idx:, :]
+        return torch.sigmoid((predicted_foot_contact - 0.5) * 2 * 6)
+
+    @property
+    def foot_contact_loss(self):
+        return self.predicted_foot_contact[..., 1:] * self.foot_velocity
+
+    def foot_movement_index(self) -> float:
+        """ calculate the amount of foot movement."""
+        foot_location = self.motion[..., self.static.foot_indexes()[-1], :].clone()  # B x K x feet x T
+        foot_velocity = ((foot_location[..., 1:] - foot_location[..., :-1]) ** 2).sum(axis=1)  # B x feet x T
+
+        return foot_velocity.sum(axis=1).sum(axis=1)
+
+    @plot('foot location')
+    def plot_foot_location(self, index) -> None:
+        my_foot = self.foot_location[index, ..., 1].detach().cpu().numpy()
+        # plt.figure()
+        plt.plot(my_foot)
+        # plt.title('foot location')
+        # plt.savefig('fc/train_foot_loc')
+
+    @plot('foot velocity')
+    def plot_foot_velocity(self, index) -> None:
+        my_vel = self.foot_velocity[index].detach().cpu().numpy()
+        # plt.figure()
+        plt.plot(my_vel)
+        # plt.title('foot velocity')
+        # plt.savefig('fc/train_foot_vel')
+
+    @plot('foot contact')
+    def plot_foot_contact_labels(self, index) -> None:
+        # plt.figure()
+        plt.plot(self.predicted_foot_contact[index].transpose(0, 1).detach().cpu().numpy())
+        # plt.title('foot contact prediction')
+        # plt.savefig('fc/train_foot_contact')
+
+    @plot('loss')
+    def plot_foot_contact_loss(self, index) -> None:
+        # plt.figure()
+        plt.plot(self.foot_contact_loss)
+        # plt.title('foot contact prediction')
+        # plt.savefig('fc/train_foot_contact')
+
+    def plot_all_4(self, index):
+        self.plot_foot_location(index)
+        self.plot_foot_velocity(index)
+        self.plot_foot_contact_labels(index)
+        self.plot_foot_contact_loss(index)

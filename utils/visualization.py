@@ -206,7 +206,11 @@ def motion2bvh_rot(static: StaticData, dynamics: DynamicData, bvh_file_path):
 
         bvh_file_dir = osp.split(bvh_file_path)[0]
         os.makedirs(bvh_file_dir, exist_ok=True)
-        BVH.save(bvh_file_path, anim, names)
+
+        bvh_file_name = osp.split(bvh_file_path)[1]
+        bvh_file_path_idx = f'{bvh_file_dir}/{idx}_{bvh_file_name}'
+
+        BVH.save(bvh_file_path_idx, anim, names)
 
         # if 'contact' in edge_rot_dict and edge_rot_dict['contact'] is not None:
         #     np.save(bvh_sub_file_path + '.contact.npy', edge_rot_dict['contact'])
