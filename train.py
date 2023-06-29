@@ -402,7 +402,6 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                 else:
                     motion2bvh_rot(dynamics[0], motion_path)
                     fig = motion2fig(static, dynamics[:5])
-
                     fig_path = osp.join(images_output_folder, f'fake_motion_{str(i).zfill(6)}.png')
                     fig.savefig(fig_path, dpi=300, bbox_inches='tight')
                     plt.close()  # close figure

@@ -6,10 +6,7 @@ from models.kinematics import ForwardKinematicsJoint
 from motion_class import StaticData
 
 
-def get_foot_location(motion_data: torch.tensor, static, normalisation_data: {}, use_global_position: bool, use_velocity: bool):
-    motion_data = motion_data * normalisation_data['std'][:, :, :motion_data.shape[2]] + \
-                  normalisation_data['mean'][:, :, :motion_data.shape[2]]
-
+def get_foot_location(motion_data: torch.tensor, static, use_global_position: bool, use_velocity: bool):
     n_motions, _, _, n_frames = motion_data.shape
     data_dtype = motion_data.dtype
 
@@ -44,7 +41,9 @@ def get_foot_location(motion_data: torch.tensor, static, normalisation_data: {},
 def get_foot_contact(motion_data, static, normalisation_data, use_global_position, use_velocity, axis_up):
     # from utils.data import foot_names
     n_motions, _, _, n_frames = motion_data.shape
-    foot_location, foot_indexes, offsets = get_foot_location(motion_data, static, normalisation_data,
+    motion_data = motion_data * normalisation_data['std'][:, :, :motion_data.shape[2]] + \
+                  normalisation_data['mean'][:, :, :motion_data.shape[2]]
+    foot_location, foot_indexes, offsets = get_foot_location(motion_data, static,
                                                              use_global_position, use_velocity)
 
     foot_up_location = foot_location[..., axis_up]
@@ -73,7 +72,10 @@ def get_foot_contact(motion_data, static, normalisation_data, use_global_positio
 
 
 def get_foot_velo(motion_data, static, normalisation_data, use_global_position, use_velocity):
-    foot_location, _, _ = get_foot_location(motion_data, static, normalisation_data, use_global_position, use_velocity)
+    motion_data = motion_data * normalisation_data['std'][:, :, :motion_data.shape[2]] + \
+                  normalisation_data['mean'][:, :, :motion_data.shape[2]]
+
+    foot_location, _, _ = get_foot_location(motion_data, static, use_global_position, use_velocity)
 
     foot_velocity = (foot_location[:, 1:] - foot_location[:, :-1]).pow(2).sum(axis=-1).sqrt()
     # if foot velocity is greater than threshold we don't consider it a contact
