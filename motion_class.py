@@ -79,7 +79,6 @@ NOTES
 * expand joints is important otherwise we see some inconsistency at plotting
 
 """
-import copy
 import torch
 import numpy as np
 import networkx as nx
@@ -89,8 +88,8 @@ from Motion import BVH
 from utils.foot import get_foot_location
 from Motion.Animation import Animation
 from Motion.Quaternions import Quaternions
-from utils.data import expand_topology_edges
-from Motion.AnimationStructure import children_list, get_sorted_order
+from utils.preprocess_edges import expand_topology_edges
+from Motion.AnimationStructure import children_list
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'

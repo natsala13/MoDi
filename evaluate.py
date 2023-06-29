@@ -83,7 +83,6 @@ def generate(args, g_ema, device, mean_joints, std_joints):
     # np.save(EVALUATE_MOTION_INPUT, generated_motion_np)
     # np.save(EVALUATE_EDGE_ROT_DICT, edge_rot_dict_general)
     #
-    # import ipdb;ipdb.set_trace()
     generated_motions = convert_motions_to_location(generated_motion_np, edge_rot_dict_general, args.dataset)
 
     # np.save(EVALUATE_MOTION_OUTPUT, generated_motions)
