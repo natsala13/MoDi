@@ -631,7 +631,7 @@ def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dic
         n_frames = motion_tr.shape[0]
         n_edges = motion_tr.shape[1]
 
-        frame_mults[hierarchy_level] = int(n_frames_max / n_frames)  # Whats that?
+        frame_mults[hierarchy_level] = int(n_frames_max / n_frames)  # TODO: Whats that?
         if type in ['sample', 'interp-mix-pyramid'] and n_edges != Edge.n_edges[-1]:
                 # and hierarchy_level != len(motion_data) - 1:  # uppermost hierarchy level
             n_feet = len(Edge.feet_list_edges[hierarchy_level]) # override the n_feet from outside the loop

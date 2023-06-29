@@ -10,10 +10,8 @@ from utils.data import expand_topology_joints
 from Motion import InverseKinematics as IK
 from Motion import Animation
 from Motion import BVH
-from utils.data import Joint, Edge
+from utils.data import Joint
 from utils.data import calc_bone_lengths
-from utils.data import edge_rot_dict_from_edge_motion_data, anim_from_edge_rot_dict
-from utils.data import to_list_4D, un_normalize
 from motion_class import StaticData, DynamicData
 
 

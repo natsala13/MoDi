@@ -531,7 +531,7 @@ class DynamicData:
 
         return location  # K x T
 
-    def normalise(self, mean: torch.tensor, std: torch.tensor):
+    def un_normalise(self, mean: torch.tensor, std: torch.tensor):
         return self.sub_motion(self.motion * std + mean)
 
     def sample_frames(self, frames_indexes: [int]):

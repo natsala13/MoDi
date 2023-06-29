@@ -6,7 +6,6 @@ import torch
 import sys
 
 from utils.visualization import motion2bvh_rot
-from utils.data import Joint, Edge # used by the 'eval' command
 from utils.pre_run import OptimOptions, load_all_form_checkpoint
 
 

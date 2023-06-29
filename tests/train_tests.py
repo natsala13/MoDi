@@ -71,7 +71,7 @@ def normalisation_data(metadata):
 @pytest.fixture(scope='session')
 def sampled_dynamic(dynamic, normalisation_data):
     sampled_frames = np.linspace(0, dynamic.n_frames - 1, 5).round().astype(int)
-    dynamic = dynamic.normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
+    dynamic = dynamic.un_normalise(normalisation_data['mean'][:, :, :, 0], normalisation_data['std'][:, :, :, 0])
     dynamic = dynamic.sample_frames(sampled_frames)
 
     return dynamic
@@ -118,7 +118,7 @@ def test_anim_from_edge_rot(static, sampled_dynamic, metadata_processed, normali
 
 @pytest.mark.skip
 def test_generate_figure_static(static, motion, normalisation_data):
-    fig = motion2fig(static, motion, normalisation_data=normalisation_data)
+    fig = motion2fig(static, motion)
     fig.savefig(SAVE_PATH, dpi=300, bbox_inches='tight')
     plt.close()
 

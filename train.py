@@ -22,7 +22,7 @@ import evaluate as evaluate
 
 from models.gan import Generator, Discriminator
 from utils.foot import get_foot_contact, get_foot_velo
-from utils.data import Joint, Edge # to be used in 'eval'
+from utils.data import Joint # TODO: Whats that? - to be used in 'eval'
 from utils.pre_run import TrainOptions, setup_env
 from motion_class import StaticData, DynamicData
 
@@ -395,7 +395,7 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                                         local_path=motion_path)
 
                 dynamics = DynamicData(fake_img.detach().cpu(), static, use_velocity=use_velocity)
-                dynamics = dynamics.normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
+                dynamics = dynamics.un_normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
 
                 if args.entity == 'Joint':
                     motion2bvh_loc(dynamics[0].motion.numpy().transpose(1, 0, 2), motion_path, static.parents_list)
@@ -508,7 +508,8 @@ def main(args_not_parsed):
 
     if args.entity == 'Edge':
         # static = StaticData.init_from_bvh(args.bvh, args.glob_pos, args.foot, args.rotation_repr)
-        offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+        offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :],
+                                  motion_data_raw[0]['offsets_no_root']])
         static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
                             offsets=offsets,
                             names=motion_data_raw[0]['names_with_root'],
@@ -572,9 +573,9 @@ def main(args_not_parsed):
         g_optim.load_state_dict(ckpt["g_optim"])
         d_optim.load_state_dict(ckpt["d_optim"])
 
-    motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
+    motion_data, mean_joints, std_joints, _ = motion_from_raw(args, motion_data_raw, static)
 
-    # # Just save some real motion for start - Why?
+    # Just save some real motion for start - TODO: Why?
     # motion_path = osp.join(animations_output_folder, 'real_motion.bvh')
     # motion2bvh(motion_data[0], motion_path, static=static, parents=static.parents_list, entity=args.entity,
     #            edge_rot_dict_general=edge_rot_dict_general)
@@ -600,7 +601,7 @@ def main(args_not_parsed):
         drop_last=True,
     )
 
-    use_velocity = args.entity == 'Edge' and 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']
+    use_velocity = args.entity == 'Edge' and args.use_velocity
     train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, device, logger, static,
           animations_output_folder, images_output_folder, mean_joints, std_joints, use_velocity)
 

@@ -12,7 +12,6 @@ import torch
 from torch.utils.data import DataLoader
 import numpy as np
 from utils.data import anim_from_edge_rot_dict, un_normalize, edge_rot_dict_from_edge_motion_data, motion_from_raw
-from utils.data import Joint, Edge # to be used in 'eval'
 import sys as _sys
 from evaluation.action2motion.fid import calculate_fid
 from evaluation.action2motion.diversity import calculate_diversity
@@ -90,7 +89,7 @@ def generate(args, g_ema, device, mean_joints, std_joints):
     return generated_motions
 
 
-def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, dataset_type):
+def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, dataset_type):  # TODO: Whats that function?
     edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
     edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
 
@@ -98,13 +97,13 @@ def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, data
     generated_motion_np = copy.deepcopy(generated_motion_np)
 
     if dataset_type == 'mixamo':
-        edge_rot_dict_general['offsets_no_root'] /= 100 ## not needed in humanact
+        edge_rot_dict_general['offsets_no_root'] /= 100  # not needed in humanact
 
     generated_motions = []
 
     # get anim for xyz positions
     motion_data = un_normalize(generated_motion_np, mean=edge_rot_dict_general['mean'].transpose(0, 2, 1, 3), std=edge_rot_dict_general['std'].transpose(0, 2, 1, 3))
-    anim_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general = edge_rot_dict_general)
+    anim_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general=edge_rot_dict_general)
 
     for j, (anim_dict, frame_mult) in enumerate(zip(anim_dicts, frame_mults)):
         anim, names = anim_from_edge_rot_dict(anim_dict, root_name='Hips')
@@ -124,40 +123,7 @@ def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, data
     return generated_motions
 
 
-def convert_motions_to_location_orig(generated_motion_np, edge_rot_dict_general, dataset_type):
-    edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
-    edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
-
-    edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
-    generated_motion_np = copy.deepcopy(generated_motion_np)
-
-    if dataset_type == 'mixamo':
-        edge_rot_dict_general['offsets_no_root'] /= 100 ## not needed in humanact
-
-    generated_motions = []
-
-    # get anim for xyz positions
-    motion_data = un_normalize(generated_motion_np, mean=edge_rot_dict_general['mean'].transpose(0, 2, 1, 3), std=edge_rot_dict_general['std'].transpose(0, 2, 1, 3))
-    anim_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general = edge_rot_dict_general)
-
-    for j, (anim_dict, frame_mult) in enumerate(zip(anim_dicts, frame_mults)):
-        anim, names = anim_from_edge_rot_dict(anim_dict, root_name='Hips')
-        # compute global positions using anim
-        positions = Animation.positions_global(anim)
-
-        # sample joints relevant to 15 joints skeleton
-        positions_15joints = positions[:, [7, 6, 15, 16, 17, 10, 11, 12, 0, 23, 24, 25, 19, 20, 21]] # openpose order R then L
-        positions_15joints = positions_15joints.transpose(1, 2, 0)
-        positions_15joints_oriented = positions_15joints.copy()
-        if dataset_type == 'mixamo':
-            positions_15joints_oriented = positions_15joints_oriented[:, [0, 2, 1]]
-            positions_15joints_oriented[:, 1, :] = -1 * positions_15joints_oriented[:, 1, :]
-        generated_motions.append(positions_15joints_oriented)
-
-    generated_motions = np.asarray(generated_motions)
-    return generated_motions
-
-#endregion
+# endregion
 
 def calculate_activation_statistics(activations):
     activations = activations.cpu().detach().numpy()
