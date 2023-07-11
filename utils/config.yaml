@@ -1,0 +1,4 @@
+jasper:
+  feet_names: [LeftFoot, RightFoot]
+maw:
+  feet_names: [LeftToeBase, RightToeBase]

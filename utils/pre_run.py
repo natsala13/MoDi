@@ -41,6 +41,7 @@ class TrainBaseOptions(BaseOptions):
                             help="probability of applying augmentation. 0 = use adaptive augmentation")
         parser.add_argument("--action_recog_model", type=str,
                             help="pretrained action recognition model used for feature extraction when computing evaluation metrics FID, KID, diversity")
+        parser.add_argument("--character", type=str, default='jasper', help='name of the character on the dataset')
         # default='evaluation/checkpoint_0300_mixamo_acc_0.74_train_test_split_smaller_arch.tar',
 
 
@@ -113,6 +114,7 @@ class TestBaseOptions(BaseOptions):
                             help="number of vectors to calculate mean for the truncation",)
         parser.add_argument("--ckpt",type=str,help="path to the model checkpoint",)
         parser.add_argument("--simple_idx", type=int, default=0, help="use simple idx for output bvh files")
+        parser.add_argument("--character", type=str, default='jasper', help='name of the character on the dataset')
         self.parser = parser
 
 
@@ -285,6 +287,7 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
     static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
                         offsets=offsets,
                         names=motion_data_raw[0]['names_with_root'],
+                        character_name=args.character,
                         n_channels=4,
                         enable_global_position=args.glob_pos,
                         enable_foot_contact=args.foot,

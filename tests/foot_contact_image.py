@@ -66,6 +66,7 @@ def static(motion_db):
     return StaticData(parents=motion_db[0]['parents_with_root'],
                       offsets=offsets,
                       names=motion_db[0]['names_with_root'],
+                      character_name='maw',
                       n_channels=4,
                       enable_global_position=True,
                       enable_foot_contact=True)

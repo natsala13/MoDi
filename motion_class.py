@@ -79,6 +79,8 @@ NOTES
 * expand joints is important otherwise we see some inconsistency at plotting
 
 """
+import yaml
+
 import torch
 import numpy as np
 import networkx as nx
@@ -95,10 +97,12 @@ from Motion.AnimationStructure import children_list
 BVH_EXAMPLE = 'tests/motion0.bvh'
 BVH_GENERATED = 'tests/generated_1304.bvh'
 
-LEFT_FOOT_NAME = 'LeftFoot'
-LEFT_TOE = 'LeftToeBase'
-RIGHT_FOOT_NAME = 'RightFoot'
-RIGHT_TOE = 'RightToeBase'
+# LEFT_FOOT_NAME = 'LeftFoot'
+# LEFT_TOE = 'LeftToeBase'
+# RIGHT_FOOT_NAME = 'RightFoot'
+# RIGHT_TOE = 'RightToeBase'
+
+DEFAULT_FEET_NAMES = ('LeftFoot', 'RightFoot')
 
 
 class EdgePoint(tuple):
@@ -109,9 +113,28 @@ class EdgePoint(tuple):
         return f'Edge{super(EdgePoint, self).__repr__()}'
 
 
+class StaticConfig:
+    DEFAULT_FEET_NAMES = ('LeftFoot', 'RightFoot')
+    CONFIG_YAML_FILE = 'utils/config.yaml'
+
+    def __init__(self, character_name: dict):
+        config = self.load_config(self.CONFIG_YAML_FILE)[character_name]
+
+        self.character_name = character_name
+        self.feet_names = config.get('feet_names', default=self.DEFAULT_FEET_NAMES)
+
+    @staticmethod
+    def load_config(config_path: str):
+        with open(config_path, "r") as stream:
+            config = yaml.safe_load(stream)
+
+        return config
+
+
 class StaticData:
-    def __init__(self, parents: [int], offsets: np.array, names: [str], n_channels=4,
-                 enable_global_position=False, enable_foot_contact=False, rotation_representation='quaternion'):
+    def __init__(self, parents: [int], offsets: np.array, names: [str], character_name: str,
+                 n_channels=4, enable_global_position=False, enable_foot_contact=False,
+                 rotation_representation='quaternion'):
         self._offsets = offsets.copy()
         self.names = names.copy()
 
@@ -134,6 +157,9 @@ class StaticData:
             self._enable_foot_contact()
         if rotation_representation == 'repr6d':
             self._enable_repr6d()
+
+        # self.foot_names = static_data.get('feet_names', default=DEFAULT_FEET_NAMES)\
+        self.config = StaticConfig(character_name)
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str, *args, **kwargs):
@@ -175,6 +201,10 @@ class StaticData:
     #     self.__n_channels = val
 
     @property
+    def character_name(self):
+        return self.config.character_name
+
+    @property
     def n_edges(self):
         return [len(parents) for parents in self.parents_list]
 
@@ -201,8 +231,7 @@ class StaticData:
 
     @property
     def foot_names(self):
-        # return [LEFT_TOE, RIGHT_TOE]
-        return [LEFT_FOOT_NAME, RIGHT_FOOT_NAME, LEFT_TOE, RIGHT_TOE]
+        return self.config.feet_names
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
@@ -457,7 +486,7 @@ class DynamicData:
         assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
 
     @classmethod
-    def init_from_bvh(cls, bvf_filepath: str,
+    def init_from_bvh(cls, bvf_filepath: str, character_name: str,
                       enable_global_position=False,
                       enable_foot_contact=False,
                       use_velocity=False,
@@ -465,7 +494,7 @@ class DynamicData:
 
         animation, names, frametime = BVH.load(bvf_filepath)
 
-        static = StaticData(animation.parents, animation.offsets, names,
+        static = StaticData(animation.parents, animation.offsets, names, character_name,
                             enable_global_position=enable_global_position,
                             enable_foot_contact=enable_foot_contact,
                             rotation_representation=rotation_representation)
