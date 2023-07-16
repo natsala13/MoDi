@@ -74,6 +74,11 @@
 PREPROCESSING
 [ ] list to specify which joint we are using out of all ones.
 
+PARENTS LIST
+[ ] neighbors_by_distance()
+[ ] len(parents) in traits.py
+[ ] enable_global_position() and enable_foot_contact()
+
 NOTES
 * anim_from_edge_rot_dict apply extend joints on motion
 * expand joints is important otherwise we see some inconsistency at plotting
