@@ -119,14 +119,17 @@ class EdgePoint(tuple):
 
 
 class StaticConfig:
-    DEFAULT_FEET_NAMES = ('LeftFoot', 'RightFoot')
     CONFIG_YAML_FILE = 'utils/config.yaml'
 
-    def __init__(self, character_name: dict):
-        config = self.load_config(self.CONFIG_YAML_FILE)[character_name]
+    def __getitem__(self, item):
+        assert item in self.default_config
+        return self.config.get(item, default=self.default_config[item])
 
-        self.character_name = character_name
-        self.feet_names = config.get('feet_names', default=self.DEFAULT_FEET_NAMES)
+    def __init__(self, character_name: dict):
+        config = self.load_config(self.CONFIG_YAML_FILE)
+
+        self.default_config = config['default']
+        self.config = config[character_name]
 
     @staticmethod
     def load_config(config_path: str):
@@ -236,7 +239,7 @@ class StaticData:
 
     @property
     def foot_names(self):
-        return self.config.feet_names
+        return self.config['feet_names']
 
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""

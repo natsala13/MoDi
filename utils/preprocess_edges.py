@@ -4,32 +4,17 @@ import copy
 import numpy as np
 import argparse
 
-np.set_printoptions(suppress=True)
-
 from Motion import BVH
 from Motion.Quaternions import Quaternions
 from Motion.Animation import transforms_global, positions_global
 from Motion.AnimationStructure import children_list, get_sorted_order
-
-
+from motion_class import StaticConfig
 from utils.data import anim_from_edge_rot_dict
+
+np.set_printoptions(suppress=True)
 
 DEBUG = False
 SAVE_SUB_RESULTS = False
-
-# joints like in openpose plus 2 joints in the spine and plus shoulder bones(Jasper-like)
-REQUESTED_JOINT_NAMES_1 = ['Head', 'Neck', 'Spine', 'Spine1',
-                           'Spine2', 'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
-                           'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-                           'Hips', 'RightUpLeg', 'RightLeg', 'RightFoot', 'LeftUpLeg', 'LeftLeg', 'LeftFoot']
-
-REQUESTED_JOINT_NAMES_MAW = ['Hips', 'Spine', 'Spine1', 'Spine2', 'Neck', 'Head', 'HeadTop_End',
-                             'RightRope1', 'RightRope2', 'RightRope3', 'RightRope4',
-                             'LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand',
-                             'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand',
-                             'LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase',
-                             'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase',
-                             'RightChain1', 'RightChain2', 'RightChain3', 'RightChain3_end_site']
 
 
 def fix_joint_names(char, names):  # TODO: Change that hardcoded function to detect automatic prefix.
@@ -439,13 +424,14 @@ def preprocess_edge_rot(data_root, out_suffix, dilute_intern_joints, clip_len, s
     character_names = os.listdir(data_root)
     character_names = clean(character_names, data_root)
 
-    requested_joint_names = np.array(REQUESTED_JOINT_NAMES_MAW)
-    requested_joint_names = np.array(requested_joint_names)
-
     anim_edges_split_all_chars = None
     names_split_all_chars = np.empty(0)
 
     for char in character_names:
+
+        static_config = StaticConfig(char.lower())
+        requested_joint_names = np.array(static_config['requested_joints_names'])
+
         animation_names, char_dir = get_animation_names(char, data_root)
 
         # compute mean bone length for diluted topology, for all motions of this character
