@@ -148,6 +148,10 @@ def motion2fig(static: StaticData, dynamics: DynamicData,
     # print(sampled_frames)  # [ 0 16 32 47 63]
     # dynamics = dynamics.sample_frames(sampled_frames)
 
+    if static.character_name not in ['jasper', 'maw']:
+        print('Visualisation figure generation for character out of Jasper and Maw is not configured yet')
+        return None
+
     anim, names = dynamics[0].anim_from_static()
 
     joints = np.zeros((n_sampled_motions,) + anim.shape + (3,))

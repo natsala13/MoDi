@@ -112,7 +112,7 @@ class SkeletonTraits(nn.Module):
         return 2
 
     @staticmethod
-    def n_joints():
+    def n_joints(static):
         raise 'not implemented in base class'
 
     @classmethod
@@ -248,8 +248,8 @@ class SkeletonAwareTraits(SkeletonTraits):
         return kernel.unsqueeze(dim=0)
 
     @staticmethod
-    def n_joints(entity):
-        return [len(parents) for parents in entity.parents_list]  # TODO: just return entity.n_edges
+    def n_joints(static):
+        return [len(parents) for parents in static.parents_list]  # TODO: just return entity.n_edges
 
     @classmethod
     def n_levels(cls, entity):

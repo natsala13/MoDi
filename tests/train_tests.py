@@ -51,6 +51,7 @@ def static():
     return StaticData(parents=motion_data_raw[0]['parents_with_root'],
                       offsets=offsets,
                       names=motion_data_raw[0]['names_with_root'],
+                      character_name='jasper',
                       n_channels=4,
                       enable_global_position=True,
                       enable_foot_contact=True)

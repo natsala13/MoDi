@@ -538,15 +538,6 @@ def is_list_4D(data):
     return isinstance(data, list) and all([d.ndim==4 and d.shape[0] == 1 for d in data])
 
 
-def anim_from_edge_motion_data(edge_motion_data, edge_rot_dict_general):
-    edge_rots_dict, _, _ = edge_rot_dict_from_edge_motion_data(edge_motion_data, edge_rot_dict_general=edge_rot_dict_general)
-    n_motions = edge_motion_data.shape[0]
-    anims = [None]*n_motions
-    for idx, one_edge_rot_dict in enumerate(edge_rots_dict):
-        anims[idx], names = anim_from_edge_rot_dict(one_edge_rot_dict)
-    return anims, names
-
-
 def basic_anim_from_rot(edge_rot_dict, root_name='Hips'):
     assert root_name in edge_rot_dict['names_with_root']
     root_idx = np.where(edge_rot_dict['names_with_root'] == root_name)[0][0]
@@ -638,7 +629,7 @@ def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dic
                 (list(Edge.skeletal_pooling_dist_0[hierarchy_level].values()))).flatten()
             assert parents[0] == -1 and Edge.parents_list[hierarchy_level+1][0] == -1  # make next line count on root location at index 0
             nearest_edge_idx = nearest_edge_idx_w_root_edge[1:] - 1   # root is first, hence we look from index 1 and reduce one because root is first on uppler level too.
-            if feet and n_feet > 0: # n_feet is 0 even when feet are used, for the lowermost level
+            if feet and n_feet > 0:  # n_feet is 0 even when feet are used, for the lowermost level
                 # remove foot contact label
                 nearest_edge_idx = nearest_edge_idx[:-n_feet]
                 nearest_edge_idx_w_root_edge = nearest_edge_idx_w_root_edge[:-n_feet]
@@ -707,7 +698,7 @@ def motion_from_raw(args, motion_data_raw, static):
             mean_joints = np.zeros((1, motion_data.shape[1], motion_data.shape[2], 1))
             std_joints = np.ones_like(mean_joints)
         edge_rot_dict_general = None
-    else: # entity == 'Edge'
+    else:  # entity == 'Edge'
         edge_rot_dicts = copy.deepcopy(motion_data_raw)
         edge_rot_dict_general = edge_rot_dicts[0]
         edge_rot_data = np.stack([motion['rot_edge_no_root'] for motion in edge_rot_dicts])
