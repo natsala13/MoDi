@@ -88,8 +88,8 @@ from Motion import BVH
 from utils.foot import get_foot_location
 from Motion.Animation import Animation
 from Motion.Quaternions import Quaternions
-from utils.preprocess_edges import expand_topology_edges
-from Motion.AnimationStructure import children_list
+from utils.data import expand_topology_edges
+from Motion.AnimationStructure import children_list, get_sorted_order
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'

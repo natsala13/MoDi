@@ -3,7 +3,7 @@ import numpy as np
 from models.kinematics import ForwardKinematicsJoint
 
 # from utils.data import foot_names
-from motion_class import StaticData
+# from motion_class import StaticData  # Cycle import
 
 
 def get_foot_location(motion_data: torch.tensor, static, use_global_position: bool, use_velocity: bool):
