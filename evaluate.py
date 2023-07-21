@@ -21,7 +21,7 @@ from Motion import Animation
 from matplotlib import pyplot as plt
 from generate import get_gen_mot_np, sample
 from utils.pre_run import EvaluateOptions, load_all_form_checkpoint
-from motion_class import StaticData
+from motion_class import StaticData, DynamicData
 
 TEST = False
 
@@ -57,7 +57,6 @@ def generate(args, g_ema, device, mean_joints, std_joints):
         index = range(len(generated_motion))
 
     generated_motion_np, _ = get_gen_mot_np(args, generated_motion, mean_joints, std_joints)
-    generated_motions = np.concatenate(generated_motion_np, axis=0)
 
     # EVALUATE_MOTION_INPUT = 'debug/evaluate/generated_motion_input.npy'
     # EVALUATE_MOTION_OUTPUT = 'debug/evaluate/generated_motion_to_location_output.npy'
@@ -68,7 +67,10 @@ def generate(args, g_ema, device, mean_joints, std_joints):
     # debug_edge_rot = np.load(EVALUATE_EDGE_ROT_DICT, allow_pickle=True).item()
     #
     motion_data_raw = np.load(args.path, allow_pickle=True)
-    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :], motion_data_raw[0]['offsets_no_root']])
+    offsets = np.concatenate([motion_data_raw[0]['offset_root'][np.newaxis, :] * 0, motion_data_raw[0]['offsets_no_root']])
+    if args.dataset == 'mixamo':
+        offsets /= 100  # not needed in humanact  TODO: Why do we need that?
+
     static = StaticData(parents=motion_data_raw[0]['parents_with_root'],
                         offsets=offsets,
                         names=motion_data_raw[0]['names_with_root'],
@@ -78,36 +80,27 @@ def generate(args, g_ema, device, mean_joints, std_joints):
                         enable_foot_contact=args.foot,
                         rotation_representation=args.rotation_repr)
 
-    _, _, _, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
+    dynamic_data = torch.stack([torch.from_numpy(motion[0]) for motion in generated_motion_np]).transpose(1, 2)
+    dynamics = DynamicData(dynamic_data, static, use_velocity=args.use_velocity)
+    dynamics = dynamics.un_normalise(mean_joints.transpose(0, 2, 1, 3), std_joints.transpose(0, 2, 1, 3))
+
     #
     # np.save(EVALUATE_MOTION_INPUT, generated_motion_np)
     # np.save(EVALUATE_EDGE_ROT_DICT, edge_rot_dict_general)
-    #
-    generated_motions = convert_motions_to_location(generated_motion_np, edge_rot_dict_general, args.dataset)
+
+    generated_motions = convert_motions_to_location(dynamics, args.dataset)
 
     # np.save(EVALUATE_MOTION_OUTPUT, generated_motions)
 
     return generated_motions
 
 
-def convert_motions_to_location(generated_motion_np, edge_rot_dict_general, dataset_type):  # TODO: Whats that function?
-    edge_rot_dict_general['std_tensor'] = edge_rot_dict_general['std_tensor'].cpu()
-    edge_rot_dict_general['mean_tensor'] = edge_rot_dict_general['mean_tensor'].cpu()
-
-    edge_rot_dict_general = copy.deepcopy(edge_rot_dict_general)
-    generated_motion_np = copy.deepcopy(generated_motion_np)
-
-    if dataset_type == 'mixamo':
-        edge_rot_dict_general['offsets_no_root'] /= 100  # not needed in humanact
-
+def convert_motions_to_location(dynamics, dataset_type):
     generated_motions = []
 
-    # get anim for xyz positions
-    motion_data = un_normalize(generated_motion_np, mean=edge_rot_dict_general['mean'].transpose(0, 2, 1, 3), std=edge_rot_dict_general['std'].transpose(0, 2, 1, 3))
-    anim_dicts, frame_mults, is_sub_motion = edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general=edge_rot_dict_general)
+    for j, dynamic in enumerate(dynamics):
+        anim, names = dynamic.anim_from_static()
 
-    for j, (anim_dict, frame_mult) in enumerate(zip(anim_dicts, frame_mults)):
-        anim, names = anim_from_edge_rot_dict(anim_dict, root_name='Hips')
         # compute global positions using anim
         positions = Animation.positions_global(anim)
 

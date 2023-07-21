@@ -9,7 +9,7 @@ from Motion.Quaternions import Quaternions
 from Motion.Animation import transforms_global, positions_global
 from Motion.AnimationStructure import children_list, get_sorted_order
 from motion_class import StaticConfig
-from utils.data import anim_from_edge_rot_dict
+from utils.data import anim_from_edge_rot_dict, expand_topology_edges
 
 np.set_printoptions(suppress=True)
 

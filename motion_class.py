@@ -123,11 +123,12 @@ class StaticConfig:
 
     def __getitem__(self, item):
         assert item in self.default_config
-        return self.config.get(item, default=self.default_config[item])
+        return self.config.get(item, self.default_config[item])
 
     def __init__(self, character_name: dict):
         config = self.load_config(self.CONFIG_YAML_FILE)
 
+        self.character_name = character_name
         self.default_config = config['default']
         self.config = config[character_name]
 
@@ -145,6 +146,7 @@ class StaticData:
                  rotation_representation='quaternion'):
         self._offsets = offsets.copy()
         self.names = names.copy()
+        self.config = StaticConfig(character_name)
 
         self.parents_list, self.skeletal_pooling_dist_1_edges = self.calculate_all_pooling_levels(parents)
         self.skeletal_pooling_dist_1 = [{edge[1]: [e[1] for e in pooling[edge]] for edge in pooling}
@@ -165,9 +167,6 @@ class StaticData:
             self._enable_foot_contact()
         if rotation_representation == 'repr6d':
             self._enable_repr6d()
-
-        # self.foot_names = static_data.get('feet_names', default=DEFAULT_FEET_NAMES)\
-        self.config = StaticConfig(character_name)
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str, *args, **kwargs):
