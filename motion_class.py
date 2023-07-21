@@ -92,11 +92,11 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 from Motion import BVH
-from utils.foot import get_foot_location
 from Motion.Animation import Animation
+from utils.foot import get_foot_location
 from Motion.Quaternions import Quaternions
-from utils.preprocess_edges import expand_topology_edges
 from Motion.AnimationStructure import children_list
+from utils.preprocess_edges import expand_topology_edges
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'
@@ -125,7 +125,7 @@ class StaticConfig:
         assert item in self.default_config
         return self.config.get(item, default=self.default_config[item])
 
-    def __init__(self, character_name: dict):
+    def __init__(self, character_name: str):
         config = self.load_config(self.CONFIG_YAML_FILE)
 
         self.default_config = config['default']

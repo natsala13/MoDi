@@ -17,7 +17,7 @@ DEBUG = False
 SAVE_SUB_RESULTS = False
 
 
-def fix_joint_names(char, names):  # TODO: Change that hardcoded function to detect automatic prefix.
+def fix_joint_names(char, names):
     if char == 'Ty':
         names = np.char.lstrip(names, 'Boy:')
     elif char == 'Swat':
