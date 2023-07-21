@@ -503,16 +503,6 @@ def expand_topology_joints_openpose(one_motion_data, nearest_joint_ratio=0.9):
     return one_motion_data, parents, names
 
 
-def to_list_4D(motion_data):
-    if not isinstance(motion_data, list):  # TODO: Why would it be a list?
-        assert motion_data.ndim in [3, 4]
-        if motion_data.ndim == 3:
-            motion_data = motion_data[np.newaxis]
-        motion_data = list(np.expand_dims(motion_data, 1))
-    assert is_list_4D(motion_data)
-    return motion_data
-
-
 def to_cpu(motion_data):
     if motion_data is None:
         return None
@@ -522,20 +512,6 @@ def to_cpu(motion_data):
         for i, motion in enumerate(motion_data):
             motion_data[i] = to_cpu(motion)
     return motion_data
-
-
-def un_normalize(data, mean, std):
-    if isinstance(data, list):
-        for i in range(len(data)):
-            data[i] = un_normalize(data[i], mean, std)
-    else:
-        if data.shape[1] == std.shape[1]:
-            data = data * std + mean
-    return data
-
-
-def is_list_4D(data):
-    return isinstance(data, list) and all([d.ndim==4 and d.shape[0] == 1 for d in data])
 
 
 def basic_anim_from_rot(edge_rot_dict, root_name='Hips'):
@@ -583,100 +559,6 @@ def anim_from_edge_rot_dict(edge_rot_dict, root_name='Hips'):
     return anim_exp, names_exp
 
 
-def edge_rot_dict_from_edge_motion_data(motion_data, type='sample', edge_rot_dict_general=None):
-
-    if isinstance(motion_data, np.ndarray) and motion_data.ndim==4 and motion_data.shape[0] > 1:
-        # several non-sub-motions
-        edge_rots = [None] * motion_data.shape[0]
-        frames_mult = [1] * motion_data.shape[0]
-        is_sub_motion = False
-        for i, motion in enumerate(motion_data):
-            edge_rots_internal, _, _ = edge_rot_dict_from_edge_motion_data(motion, type, edge_rot_dict_general)
-            assert len(edge_rots_internal) == 1
-            edge_rots[i] = edge_rots_internal[0]
-        return edge_rots, frames_mult, is_sub_motion
-
-    assert is_list_4D(motion_data)
-    is_sub_motion = type in ['sample', 'interp-mix-pyramid'] and (len(motion_data) > 1)
-    edge_rots = [None] * len(motion_data)
-    frame_mults = [1] * len(motion_data)
-    glob_pos = Edge.is_global_position_enabled()
-    feet = Edge.is_foot_contact_enabled()
-
-    # store upper level values
-    offsets = edge_rot_dict_general['offsets_no_root']
-    names = edge_rot_dict_general['names_with_root']
-    parents = Edge.parents_list[-1] #  upper level parents. to be used in case there is no inner iteration on hierarcy levels
-    assert all(edge_rot_dict_general['parents_with_root'] == Edge.parents_list[-1][:len(edge_rot_dict_general['parents_with_root'])]) # use 'len' because root pose may be added to Edge.parents_list[-1]
-    n_frames_max = motion_data[-1].shape[-1]
-    n_feet = len(Edge.feet_list_edges[-1])  # use this in case there is no pyramid
-
-    # So far nothing really happend, some params were extracted, first block didnt run.
-
-    # handle all levels
-    for hierarchy_level in range(len(motion_data) - 1, -1, -1):  # iterate in reverse order so each level can use its upper one
-        motion = motion_data[hierarchy_level]
-        motion_tr = motion[0].transpose(2, 0, 1)  # edges x features x frames ==> frames x edges x features
-        n_frames = motion_tr.shape[0]
-        n_edges = motion_tr.shape[1]
-
-        frame_mults[hierarchy_level] = int(n_frames_max / n_frames)  # TODO: Whats that?
-        if type in ['sample', 'interp-mix-pyramid'] and n_edges != Edge.n_edges[-1]:
-                # and hierarchy_level != len(motion_data) - 1:  # uppermost hierarchy level
-            n_feet = len(Edge.feet_list_edges[hierarchy_level]) # override the n_feet from outside the loop
-            parents = Edge.parents_list[hierarchy_level]
-            nearest_edge_idx_w_root_edge = np.array(
-                (list(Edge.skeletal_pooling_dist_0[hierarchy_level].values()))).flatten()
-            assert parents[0] == -1 and Edge.parents_list[hierarchy_level+1][0] == -1  # make next line count on root location at index 0
-            nearest_edge_idx = nearest_edge_idx_w_root_edge[1:] - 1   # root is first, hence we look from index 1 and reduce one because root is first on uppler level too.
-            if feet and n_feet > 0:  # n_feet is 0 even when feet are used, for the lowermost level
-                # remove foot contact label
-                nearest_edge_idx = nearest_edge_idx[:-n_feet]
-                nearest_edge_idx_w_root_edge = nearest_edge_idx_w_root_edge[:-n_feet]
-            if glob_pos:
-                # remove root pos 'edge'
-                nearest_edge_idx = nearest_edge_idx[:-1]
-                nearest_edge_idx_w_root_edge = nearest_edge_idx_w_root_edge[:-1]
-            offsets = offsets[nearest_edge_idx]
-            names = names[nearest_edge_idx_w_root_edge]
-        if feet and n_feet > 0:  # n_feet is 0 even when feet are used, for the lowermost level
-            # last edges are feet contact labels
-            rot_edge_no_feet = motion_tr[:, :-n_feet, :]  # drop root rotation (1st idx). it will be used in 'rot_root'
-            parents_no_feet = parents[:-n_feet]
-            feet_label = motion_tr[:, -n_feet:, :]
-        else:
-            rot_edge_no_feet = motion_tr
-            parents_no_feet = parents
-            feet_label = None
-        rot_edge_no_root = rot_edge_no_feet[:, 1:, :]  # drop root rotation (1st idx). it will be used in 'rot_root'
-        if glob_pos:
-            # last edge is global position.
-            rot_edge_no_root = rot_edge_no_root[:, :-1, :]  # drop root rotation (1st idx). it will be used in 'rot_root'
-            pose_root = rot_edge_no_feet[:, -1, :3]  #  drop the 4th item in the position tensor
-            parents_no_pose = parents_no_feet[:-1]
-            if 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']:
-                pose_root = np.cumsum(pose_root, axis=0)
-        else:
-            pose_root = np.zeros((n_frames, 3))
-            parents_no_pose = parents_no_feet
-
-        edge_rots[hierarchy_level] = {'rot_edge_no_root': rot_edge_no_root,
-                                      'parents_with_root': parents_no_pose,  # edge_rot_dict_general['parents_with_root'],
-                                      'offsets_no_root': offsets,  # edge_rot_dict_general['offsets_no_root'],
-                                      'rot_root': motion_tr[:, 0],
-                                      'pos_root': pose_root,
-                                      'offset_root': np.zeros(3),
-                                      'names_with_root': names,
-                                      'contact': feet_label}
-        # repeat frames so the frame number of the is_sub_motion would be the same as the final one,
-        # in order to make the visualization synchronized
-        for element in ['rot_edge_no_root', 'rot_root', 'pos_root']:
-            edge_rots[hierarchy_level][element] = \
-                edge_rots[hierarchy_level][element].repeat(frame_mults[hierarchy_level], axis=0)
-
-    return edge_rots, frame_mults, is_sub_motion
-
-
 def motion_from_raw(args, motion_data_raw, static):
     if args.entity == 'Joint':
         if args.skeleton:
@@ -697,10 +579,8 @@ def motion_from_raw(args, motion_data_raw, static):
         else:
             mean_joints = np.zeros((1, motion_data.shape[1], motion_data.shape[2], 1))
             std_joints = np.ones_like(mean_joints)
-        edge_rot_dict_general = None
     else:  # entity == 'Edge'
         edge_rot_dicts = copy.deepcopy(motion_data_raw)
-        edge_rot_dict_general = edge_rot_dicts[0]
         edge_rot_data = np.stack([motion['rot_edge_no_root'] for motion in edge_rot_dicts])
         root_rot_data = np.stack([motion['rot_root'] for motion in edge_rot_dicts])
 
@@ -720,10 +600,7 @@ def motion_from_raw(args, motion_data_raw, static):
                 dim_delta = motion_data.shape[-1] - root_pos_data.shape[-1]
                 root_pos_data = np.concatenate([root_pos_data, np.zeros(root_pos_data.shape[:-1] + (dim_delta,))],
                                                axis=2)
-            if args.use_velocity:
-                edge_rot_dict_general['use_velocity'] = True
-            else:
-                edge_rot_dict_general['use_velocity'] = False
+
             motion_data = np.concatenate([motion_data, root_pos_data[:,:,np.newaxis]], axis=2)
 
         # samples x frames x edges x features ==> samples x edges x features x frames
@@ -743,12 +620,11 @@ def motion_from_raw(args, motion_data_raw, static):
             std_joints = np.ones_like(mean_joints)
 
         # Trick to make denormalize work for foot contact extraction
-        edge_rot_dict_general['mean'] = mean_joints.transpose(0, 2, 1, 3)
-        edge_rot_dict_general['std'] = std_joints.transpose(0, 2, 1, 3)
+        normalisation_data = {'mean':  mean_joints.transpose(0, 2, 1, 3), 'std': std_joints.transpose(0, 2, 1, 3)}
 
         if args.foot:
             motion_data_torch = torch.from_numpy(motion_data).transpose(1, 2)
-            motion_data_torch = append_foot_contact(motion_data_torch, static, edge_rot_dict_general,
+            motion_data_torch = append_foot_contact(motion_data_torch, static, normalisation_data,
                                                     args.glob_pos, args.use_velocity, args.axis_up)
             motion_data = motion_data_torch.transpose(1, 2).numpy()
 
@@ -757,17 +633,7 @@ def motion_from_raw(args, motion_data_raw, static):
             mean_joints = np.append(mean_joints, padding, axis=1)
             std_joints = np.append(std_joints, np.ones_like(padding), axis=1)
 
-        # Normalization in the shape of (1, n_feature, n_joints, 1)
-        edge_rot_dict_general['mean'] = mean_joints.transpose(0, 2, 1, 3)
-        edge_rot_dict_general['std'] = std_joints.transpose(0, 2, 1, 3)
-
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        edge_rot_dict_general['mean_tensor'] = torch.tensor(edge_rot_dict_general['mean'], dtype=torch.float32).to(device)
-        edge_rot_dict_general['std_tensor'] = torch.tensor(edge_rot_dict_general['std'], dtype=torch.float32).to(device)
-
-    # motion_data = motion_data[:1,...]; assert args.batch == 1; print('*********\nOVERFITTING!!!\n******') # overfit over one sample only
-
-    return motion_data, mean_joints, std_joints, edge_rot_dict_general
+    return motion_data, mean_joints, std_joints
 
 
 def append_foot_contact(motion_data, static, normalisation_data, global_position, use_velocity, axis_up):

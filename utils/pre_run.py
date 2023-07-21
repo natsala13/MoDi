@@ -308,13 +308,15 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
     mean_joints = checkpoint['mean_joints']
     std_joints = checkpoint['std_joints']
 
-
     if return_motion_data:
         motion_data_raw = np.load(args.path, allow_pickle=True)
-        motion_data, mean_joints, std_joints, edge_rot_dict_general = motion_from_raw(args, motion_data_raw, static)
+        motion_data, mean_joints, std_joints, _ = motion_from_raw(args, motion_data_raw, static)
 
         mean_latent = g_ema.mean_latent(args.truncation_mean)
+        normalisation_data = {'mean': mean_joints.transpose(0, 2, 1, 3),
+                              'std': std_joints.transpose(0, 2, 1, 3),
+                              'use_velocity': args.use_velocity}
 
-        return g_ema, discriminator, motion_data, mean_latent, edge_rot_dict_general
+        return g_ema, discriminator, motion_data, mean_latent, static, normalisation_data
 
     return g_ema, discriminator, checkpoint, static, mean_joints, std_joints

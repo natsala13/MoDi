@@ -11,7 +11,6 @@ import torch
 
 from torch.utils.data import DataLoader
 import numpy as np
-from utils.data import anim_from_edge_rot_dict, un_normalize, edge_rot_dict_from_edge_motion_data, motion_from_raw
 import sys as _sys
 from evaluation.action2motion.fid import calculate_fid
 from evaluation.action2motion.diversity import calculate_diversity

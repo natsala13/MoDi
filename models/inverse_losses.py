@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import torch.nn.functional as F
+
+from motion_class import StaticData
 from models.kinematics import ForwardKinematicsJoint
 
 
@@ -26,29 +28,27 @@ class LatentCenterRegularizer(torch.nn.Module):
 
 
 class PositionLoss:
-    def __init__(self, edge_rot_dict_general, device, use_glob_pos, use_contact, local_frame=False):
-        root_idx = 0
-        offsets = np.insert(edge_rot_dict_general['offsets_no_root'], root_idx, edge_rot_dict_general['offset_root'],
-                            axis=0)
+    def __init__(self, static: StaticData, normalisation_data, device, use_glob_pos, use_contact, local_frame=False):
+        offsets = static.offsets
         offsets = torch.from_numpy(offsets).to(device).type(torch.float32)
         self.use_glob_pos = use_glob_pos
-        self.fk = ForwardKinematicsJoint(edge_rot_dict_general['parents_with_root'], offsets)
-        self.edge_rot_dict_general = edge_rot_dict_general
+        self.fk = ForwardKinematicsJoint(static.parents, offsets)
+        self.normalisation_data = normalisation_data
         self.criteria = torch.nn.MSELoss()
         self.local_frame = local_frame
         if use_contact:
             self.pos_offset = -3 if use_contact else -1
 
     def get_pos(self, motion_data):
-        edge_rot_dict_general = self.edge_rot_dict_general
-        motion_data = motion_data * edge_rot_dict_general['std_tensor'][:, :, :motion_data.shape[2]] + \
-                      edge_rot_dict_general['mean_tensor'][:, :, :motion_data.shape[2]]
-        motion_for_fk = motion_data.transpose(1,
-                                              3)  # samples x features x joints x frames  ==>  samples x frames x joints x features
+        motion_data = motion_data * self.normalisation_data['std'][:, :, :motion_data.shape[2]] + \
+                      self.normalisation_data['mean'][:, :, :motion_data.shape[2]]
+        # samples x features x joints x frames  ==>  samples x frames x joints x features
+        motion_for_fk = motion_data.transpose(1, 3)
+
         if self.use_glob_pos:
             #  last 'joint' is global position. use only first 3 features out of it.
             glob_pos = motion_for_fk[:, :, self.pos_offset, :3]
-            if 'use_velocity' in edge_rot_dict_general and edge_rot_dict_general['use_velocity']:
+            if self.normalisation_data['use_velocity']:
                 glob_pos = torch.cumsum(glob_pos, dim=1)
             if self.local_frame:
                 glob_pos.fill_(0.)

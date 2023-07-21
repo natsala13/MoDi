@@ -95,8 +95,6 @@ from Motion import BVH
 from Motion.Animation import Animation
 from utils.foot import get_foot_location
 from Motion.Quaternions import Quaternions
-from utils.data import expand_topology_edges
-from Motion.AnimationStructure import children_list, get_sorted_order
 from Motion.AnimationStructure import children_list
 from utils.preprocess_edges import expand_topology_edges
 
