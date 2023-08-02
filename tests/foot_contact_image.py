@@ -80,7 +80,7 @@ def fake_args():
 
 @pytest.fixture(scope='module')
 def motion_with_preprocess(motion_db, static, fake_args):
-    motion_data, _, _, _ = motion_from_raw(fake_args, motion_db, static)
+    motion_data, _, _ = motion_from_raw(fake_args, motion_db, static)
 
     return motion_data
 

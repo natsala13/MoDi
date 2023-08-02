@@ -310,7 +310,7 @@ def load_all_form_checkpoint(ckpt_path, args, return_motion_data=False):
 
     if return_motion_data:
         motion_data_raw = np.load(args.path, allow_pickle=True)
-        motion_data, mean_joints, std_joints, _ = motion_from_raw(args, motion_data_raw, static)
+        motion_data, mean_joints, std_joints = motion_from_raw(args, motion_data_raw, static)
 
         mean_latent = g_ema.mean_latent(args.truncation_mean)
         normalisation_data = {'mean': mean_joints.transpose(0, 2, 1, 3),
