@@ -29,7 +29,7 @@ def get_foot_location(motion_data: torch.tensor, static, use_global_position: bo
     joint_location = fk.forward_edge_rot(motion_for_fk, glob_pos)
     # compute foot contact
 
-    foot_indexes = static.foot_indexes(include_toes=True)[-1]
+    foot_indexes = static.foot_indexes[-1]
     foot_location = joint_location[:, :, foot_indexes]
 
     # up_joints = joint_location[..., 1]

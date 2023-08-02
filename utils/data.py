@@ -294,55 +294,6 @@ def calc_bone_lengths(motion_data, parents=None, names=None):
     return bone_lengths
 
 
-def neighbors_by_distance(parents: [int], dist=1):
-    assert dist in [0,1], 'distance larger than 1 is not supported yet'
-
-    neighbors = {joint_idx: [joint_idx] for joint_idx in range(len(parents))}
-
-    if dist == 0:  # code should be general to any distance. for now dist==1 is the largest supported
-        return neighbors
-
-
-    # handle non virtual joints
-    n_entities = len(parents)
-    children = children_list(parents)
-    for joint_idx in range(n_entities):
-        parent_idx = parents[joint_idx]
-        if parent_idx not in [-1,-2] and not isinstance(parent_idx, tuple):  # -1 is the parent of root. -2 is the parent of global location, tuple for foot_contact
-            neighbors[joint_idx].append(parent_idx)  # add entity's parent
-        neighbors[joint_idx].extend(children[joint_idx])  # append all entity's children
-
-    # handle global pos virtual joint
-    if -2 in parents:  # Global position is enabled...
-        # print(f'parents - {parents}')
-        root_idx = parents.index(-1)
-        glob_pos_idx = parents.index(-2)
-
-        # global position should have same neighbors of root and should become his neighbors' neighbor
-        neighbors[glob_pos_idx].extend(neighbors[root_idx])
-        for root_neighbor in neighbors[root_idx]:
-            # changing the neighbors of root during iteration puts the new neighbor in the iteration
-            if root_neighbor != root_idx:
-                neighbors[root_neighbor].append(glob_pos_idx)
-        neighbors[root_idx].append(glob_pos_idx)  # finally change root itself
-
-    # handle foot contact label virtual joint
-    foot_and_contact_label = [(i, parents[i][1]) for i in range(len(parents)) if
-                              isinstance(parents[i],tuple) and parents[i][0]==-3]
-
-    # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
-    for foot_idx, contact_label_idx in foot_and_contact_label:
-        neighbors[contact_label_idx].extend(neighbors[foot_idx])
-
-        for foot_neighbor in neighbors[foot_idx]:
-            # changing the neighbors of root during iteration puts the new neighbor in the iteration
-            if foot_neighbor != foot_idx:
-                neighbors[foot_neighbor].append(contact_label_idx)
-        neighbors[foot_idx].append(contact_label_idx)  # finally change foot itself
-
-    return neighbors
-
-
 def expand_topology_edges(anim, req_joint_idx=None, names=None, offset_len_mean=None, nearest_joint_ratio=0.9):
     assert nearest_joint_ratio == 1, 'currently not supporting nearest_joint_ratio != 1'
 

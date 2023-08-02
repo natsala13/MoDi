@@ -16,7 +16,7 @@ from torch.nn import functional as F
 from op import FusedLeakyReLU, fused_leaky_relu, upfirdn2d
 
 from models.skeleton import SkeletonUnpool
-from motion_class import StaticData
+from motion_class import StaticData, StaticSubLayer
 
 
 class PixelNorm(nn.Module):
@@ -450,7 +450,8 @@ class Generator(nn.Module):
         self.input = ConstantInput(self.n_channels[0], size=(n_joints[0], self.n_frames[0]))
         # end mapping network and constant
 
-        skeleton_traits1 = traits_class(static.parents_list[0], keep_skeletal_dims(n_joints[0]))
+        layer0 = static.hierarchical_keep_dim_layer(layer=0)
+        skeleton_traits1 = traits_class(layer0)
         self.conv1 = StyledConv(
             self.n_channels[0], self.n_channels[0], 3, style_dim,
             blur_kernel=blur_kernel, skeleton_traits=skeleton_traits1
@@ -475,7 +476,8 @@ class Generator(nn.Module):
             out_channel = self.n_channels[i]
             cur_parents = static.parents_list[i]
 
-            skeleton_traits_upsample = traits_class(cur_parents, static.skeletal_pooling_dist_1[i - 1])
+            layer_i = static.hierarchical_upsample_layer(layer=i)
+            skeleton_traits_upsample = traits_class(layer_i)
             # upsample
             self.convs.append(
                 StyledConv(
@@ -488,7 +490,9 @@ class Generator(nn.Module):
                     skeleton_traits=skeleton_traits_upsample,
                 )
             )
-            skeleton_traits_keep_dims = traits_class(cur_parents, keep_skeletal_dims(n_joints[i]))
+
+            layer_i = static.hierarchical_keep_dim_layer(layer=i)
+            skeleton_traits_keep_dims = traits_class(layer_i)
             # keep dims
             for _ in range(n_inplace_conv):
                 self.convs.append(
@@ -656,15 +660,11 @@ class ConvLayer(nn.Sequential):
 
 
 class ResBlock(nn.Module):
-    def __init__(self, in_channel, out_channel, blur_kernel=[1, 3, 3, 1], skeleton_traits_for_kernel_3=None,
-                 skeleton_traits_for_kernel_1=None, n_inplace_conv=1):
+    def __init__(self, in_channel, out_channel, skeleton_traits_for_kernel_3,
+                 skeleton_traits_for_kernel_1, skeleton_traits_keep_dims, n_inplace_conv=1):
         super().__init__()
 
         self.n_inplace_conv = n_inplace_conv
-        larger_n_joints = skeleton_traits_for_kernel_3.larger_n_joints
-        traits_class = type(skeleton_traits_for_kernel_3)
-        skeleton_traits_keep_dims = traits_class(skeleton_traits_for_kernel_3.parents,
-                                                 keep_skeletal_dims(larger_n_joints))
 
         convs = []
         for _ in range(n_inplace_conv):
@@ -696,18 +696,26 @@ class Discriminator(nn.Module):
         self.n_frames = traits_class.n_frames(static)
         self.n_levels = traits_class.n_levels(static)
 
-        skeleton_traits = traits_class(parents=static.parents_list[-1], pooling_list=keep_skeletal_dims(n_joints[-1]))
+        layer_i = static.hierarchical_keep_dim_layer(layer=-1)
+        skeleton_traits = traits_class(layer_i)
+
         convs = [ConvLayer(static.n_channels, self.n_channels[-1], 1, skeleton_traits=skeleton_traits)] # channel-wise expansion. keep dims. kernel=1
 
         in_channel = self.n_channels[-1]
 
         for i in range(self.n_levels-1, 0, -1):
             out_channel = self.n_channels[i-1]
-            skeleton_traits_for_kernel_3 = traits_class(static.parents_list[i], static.skeletal_pooling_dist_1[i - 1])
-            skeleton_traits_for_kernel_1 = traits_class(static.parents_list[i], static.skeletal_pooling_dist_0[i - 1])
 
-            convs.append(ResBlock(in_channel, out_channel, blur_kernel, skeleton_traits_for_kernel_3,
-                                  skeleton_traits_for_kernel_1, n_inplace_conv))
+            upsample_layer_1 = static.hierarchical_upsample_layer(layer=i)
+            upsample_layer_0 = static.hierarchical_upsample_layer(layer=i, pooling_dist=0)
+            keep_layer = static.hierarchical_keep_dim_layer(layer=i)
+
+            skeleton_traits_for_kernel_3 = traits_class(upsample_layer_1)
+            skeleton_traits_for_kernel_1 = traits_class(upsample_layer_0)
+            skeleton_traits_keep_dims = traits_class(keep_layer)
+
+            convs.append(ResBlock(in_channel, out_channel, skeleton_traits_for_kernel_3,
+                                  skeleton_traits_for_kernel_1, skeleton_traits_keep_dims, n_inplace_conv))
 
             in_channel = out_channel
 
@@ -716,7 +724,9 @@ class Discriminator(nn.Module):
         self.stddev_group = 4
         self.stddev_feat = 1
 
-        skeleton_traits = traits_class(static.parents_list[0], keep_skeletal_dims(n_joints[0]))
+        layer_i = static.hierarchical_keep_dim_layer(layer=0)
+        skeleton_traits = traits_class(layer_i)
+
         self.final_conv = ConvLayer(in_channel + 1, self.n_channels[0], 3, skeleton_traits=skeleton_traits) # channels 257-->256, keep dims, kernel=3
         self.final_linear = nn.Sequential(
             EqualLinear(self.n_channels[0] * n_joints[0] * self.n_frames[0], self.n_channels[0], activation='fused_lrelu'),

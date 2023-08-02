@@ -416,7 +416,6 @@ def train(args, loader, generator, discriminator, g_optim, d_optim, g_ema, devic
                     time_measure.append(elapsed)
                     print(f'\nTime of last {args.report_every} iterations: {int(elapsed)} seconds.')
                     start_time_measure = time.time()
-
     mean_times = sum(time_measure)/len(time_measure)
     print(f'\nAverage time for {args.report_every} iterations: {mean_times} seconds.')
 
@@ -574,7 +573,7 @@ def main(args_not_parsed):
         g_optim.load_state_dict(ckpt["g_optim"])
         d_optim.load_state_dict(ckpt["d_optim"])
 
-    motion_data, mean_joints, std_joints, _ = motion_from_raw(args, motion_data_raw, static)
+    motion_data, mean_joints, std_joints, = motion_from_raw(args, motion_data_raw, static)
 
     # Just save some real motion for start - TODO: Why?
     # motion_path = osp.join(animations_output_folder, 'real_motion.bvh')

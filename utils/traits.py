@@ -1,12 +1,41 @@
-import numpy as np
-
 import torch
+import numpy as np
 from torch import nn
 from torch.nn import functional as F
 
-from models.skeleton import SkeletonPool, SkeletonUnpool
-from utils.data import neighbors_by_distance
 from models.gan import Upsample
+from motion_class import StaticSubLayer
+from Motion.AnimationStructure import children_list
+from models.skeleton import SkeletonPool, SkeletonUnpool
+
+
+def neighbors_by_distance(layer: StaticSubLayer, dist=1):
+    assert dist in [0, 1], 'distance larger than 1 is not supported yet'
+
+    if dist == 0:  # code should be general to any distance. for now dist==1 is the largest supported
+        number_of_joints = len(layer.parents) + layer.global_position + len(layer.feet_indexes)
+        return {joint_idx: [joint_idx] for joint_idx in range(number_of_joints)}
+
+    children = children_list(layer.parents)
+    neighbors = {joint: [joint] + ([layer.parents[joint]] if joint != 0 else []) + children[joint].tolist() for joint in range(len(layer.parents))}
+
+    # global position should have same neighbors of root and should become his neighbors' neighbor
+    if layer.global_position:
+        root_index = layer.parents.index(-1)
+        global_position_index = len(layer.parents)
+
+        neighbors[global_position_index] = [global_position_index] + neighbors[root_index]
+
+        for root_neighbor in neighbors[root_index].copy():
+            neighbors[root_neighbor].append(global_position_index)
+
+    # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
+    for foot_index, foot_contact_index in zip(layer.feet_indexes, range(len(neighbors), len(neighbors) + len(layer.feet_indexes))):  # TODO: Why is it different than global position? Why do we dont add it to the foot neigs?
+        neighbors[foot_contact_index] = [foot_contact_index, foot_index]
+
+        neighbors[foot_index].append(foot_contact_index)
+
+    return neighbors
 
 
 class SkeletonTraits(nn.Module):
@@ -31,7 +60,7 @@ class SkeletonTraits(nn.Module):
         return Upsample(blur_kernel, skeleton_traits=self)
 
     def updown_pad(self, kernel_size=None):
-        return (0,0)
+        return (0, 0)
 
     @staticmethod
     def skeleton_aware():
@@ -140,18 +169,20 @@ class SkeletonTraits(nn.Module):
     def is_pool():
         return False
 
+
 class NonSkeletonAwareTraits(SkeletonTraits):
-    # def __init__(self, parent=None, pooling_list=None):
-    def __init__(self, parents, pooling_list):
+    def __init__(self, layer: StaticSubLayer):
         super().__init__()
 
         self.updown_stride = (2, 2)
 
-        # ths following are not really needed for a non-skeleton-aware class. they are kept for compitability with the other classes
-        self.pooling_list = pooling_list
-        self.parents = parents
-        self.larger_n_joints = len(parents)
-        self.smaller_n_joints = len(pooling_list)
+        # ths following are not really needed for a non-skeleton-aware class.
+        # they are kept for compitability with the other classes
+        self.layer = layer
+        self.pooling_list = layer.pooling_list
+        self.parents = layer.parents
+        self.larger_n_joints = layer.edges_number
+        self.smaller_n_joints = layer.edges_number_after_pooling
         self.upfirdn_kernel_exp = 2
         self.need_blur = True
 
@@ -193,14 +224,15 @@ class NonSkeletonAwareTraits(SkeletonTraits):
 
 
 class SkeletonAwareTraits(SkeletonTraits):
-    def __init__(self, parents, pooling_list):
+    def __init__(self, layer: StaticSubLayer):
         super().__init__()
 
-        self.parents = parents
-        self.pooling_list = pooling_list
+        self.layer = layer
+        self.parents = layer.parents
+        self.pooling_list = layer.pooling_list
         self.updown_stride = (1, 2)
-        self.larger_n_joints = len(parents)
-        self.smaller_n_joints = len(pooling_list)
+        self.larger_n_joints = layer.edges_number
+        self.smaller_n_joints = layer.edges_number_after_pooling
         self.upfirdn_kernel_exp = 1
         self.need_blur = True
 
@@ -231,7 +263,7 @@ class SkeletonAwareTraits(SkeletonTraits):
             affectors_all_joint = self.pooling_list
         else:
             neighbor_dist = kernel_size // 2
-            affectors_all_joint = neighbors_by_distance(self.parents, neighbor_dist)
+            affectors_all_joint = neighbors_by_distance(self.layer, neighbor_dist)
 
         mask = torch.zeros_like(weight)
         for joint_idx, affectors_this_joint in affectors_all_joint.items():
@@ -249,7 +281,7 @@ class SkeletonAwareTraits(SkeletonTraits):
 
     @staticmethod
     def n_joints(static):
-        return [len(parents) for parents in static.parents_list]  # TODO: just return entity.n_edges
+        return static.number_of_joints_in_hierarchical_levels()  
 
     @classmethod
     def n_levels(cls, entity):
@@ -257,8 +289,8 @@ class SkeletonAwareTraits(SkeletonTraits):
 
 
 class SkeletonAwareConv3DTraits(SkeletonAwareTraits):
-    def __init__(self, parents, pooling_list):
-        super().__init__(parents, pooling_list)
+    def __init__(self, layer: StaticSubLayer):
+        super().__init__(layer)
 
         self.updown_stride = (1,) + self.updown_stride
         self.transposed_conv_func = F.conv_transpose3d
@@ -311,8 +343,8 @@ class SkeletonAwareConv3DTraits(SkeletonAwareTraits):
 
 class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
 
-    def __init__(self, parents, pooling_list):
-        super().__init__(parents, pooling_list)
+    def __init__(self, layer: StaticSubLayer):
+        super().__init__(layer)
         self.transposed_conv_func = self.transposed_conv_func2
         self.conv_func = self.conv_func2
         self.need_blur = False
@@ -329,7 +361,7 @@ class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
 
     def mask_internal(self, weight, out_channel, kernel_size):
         neighbor_dist = kernel_size // 2
-        affectors_all_joint = neighbors_by_distance(self.parents, neighbor_dist)
+        affectors_all_joint = neighbors_by_distance(self.layer, neighbor_dist)
 
         mask = torch.zeros_like(weight)
         for joint_idx, affectors_this_joint in affectors_all_joint.items():
@@ -377,8 +409,8 @@ class SkeletonAwarePoolTraits(SkeletonAwareConv3DTraits):
 
 
 class SkeletonAwareFastConvTraits(SkeletonAwareConv3DTraits):
-    def __init__(self, parents, pooling_list):
-        super().__init__(parents, pooling_list)
+    def __init__(self, layer: StaticSubLayer):
+        super().__init__(layer)
         self.updown_stride = self.updown_stride[1:]
 
         def conv_func(inputs, weight, padding=0, stride=1, groups=1, **kwargs):

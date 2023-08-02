@@ -85,6 +85,7 @@ NOTES
 
 """
 import yaml
+import functools
 
 import torch
 import numpy as np
@@ -96,7 +97,7 @@ from Motion.Animation import Animation
 from utils.foot import get_foot_location
 from Motion.Quaternions import Quaternions
 from Motion.AnimationStructure import children_list
-from utils.preprocess_edges import expand_topology_edges
+from utils.data import expand_topology_edges
 
 
 BVH_EXAMPLE = 'tests/motion0.bvh'
@@ -138,6 +139,40 @@ class StaticConfig:
             config = yaml.safe_load(stream)
 
         return config
+
+
+class StaticSubLayer:
+    """Representing a static layer in the down sampling process including parents and feet indexes."""
+    def __init__(self, parents: [int], pooling_list: {int: [int]},  global_position: bool, feet_indexes: [str]):
+        self.parents = parents
+        self.pooling_list = pooling_list
+        self.global_position = global_position
+        self.feet_indexes = feet_indexes
+
+    @classmethod
+    def keep_dim_layer(cls, parents: [int], *args, **kwargs):
+        layer = cls(parents, None, *args, **kwargs)
+        layer.pooling_list = {joint_idx: [joint_idx] for joint_idx in range(layer.edges_number)}
+
+        return layer
+
+    @property
+    def foot_contact(self):
+        return self.feet_indexes is not None
+
+    @property
+    def edges_number(self):
+        return len(self.parents) + self.global_position + len(self.feet_indexes)
+
+    @property
+    def edges_number_after_pooling(self):
+        return len(self.pooling_list)
+
+    def fake_parents(self, parents=None):
+        # In case debug is needed compared to older method.
+        if not parents:
+            parents = self.parents
+        return parents + ([-2] if self.global_position else []) + ([(-3, index) for index in self.feet_indexes])
 
 
 class StaticData:
@@ -225,21 +260,18 @@ class StaticData:
         No need to really add it in edges_list and all the other structures that are based on tuples. We add it only
         to the structures that are based on indices.
         Its neighboring edges are the same as the neighbors of root """
-        assert self.parents_list[0][-1] != -2
-
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
             for pooling_hierarchical_stage in pooling_list:
                 n_small_stage = max(pooling_hierarchical_stage.keys()) + 1
                 n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
                 pooling_hierarchical_stage[n_small_stage] = [n_large_stage]
 
-        for parents in self.parents_list:
-            parents.append(-2)
-
     @property
     def foot_names(self):
         return self.config['feet_names']
 
+    @property
+    @functools.lru_cache()
     def foot_indexes(self, include_toes=True):
         """Run overs pooling list and calculate foot location at each level"""
         # feet_names = [LEFT_FOOT_NAME, LEFT_TOE, RIGHT_FOOT_NAME, RIGHT_TOE] if include_toes else [LEFT_FOOT_NAME,
@@ -254,7 +286,7 @@ class StaticData:
 
     @property
     def foot_number(self):
-        return len(self.foot_indexes()[-1])
+        return len(self.foot_indexes[-1])
 
     def _enable_foot_contact(self):
         """ add special entities that would be the foot contact labels.
@@ -262,19 +294,30 @@ class StaticData:
         No need to really add them in edges_list and all the other structures that are based on tuples. We add them only
         to the structures that are based on indices.
         Their neighboring edges are the same as the neighbors of the feet """
-        assert not isinstance(self.parents_list[0][-1], tuple)
-
-        all_foot_indexes = self.foot_indexes()
-        for parent, foot_indexes in zip(self.parents_list, all_foot_indexes):
-            for foot_index in foot_indexes:
-                parent.append((-3, foot_index))
-
         for pooling_list in [self.skeletal_pooling_dist_0, self.skeletal_pooling_dist_1]:
-            for pooling_hierarchical_stage, foot_indexes in zip(pooling_list, all_foot_indexes):
+            for pooling_hierarchical_stage, foot_indexes in zip(pooling_list, self.foot_indexes):
                 for _ in foot_indexes:
                     n_small_stage = max(pooling_hierarchical_stage.keys()) + 1
                     n_large_stage = max(val for edge in pooling_hierarchical_stage.values() for val in edge) + 1
                     pooling_hierarchical_stage[n_small_stage] = [n_large_stage]
+
+    def hierarchical_upsample_layer(self, layer: int, pooling_dist=1) -> StaticSubLayer:
+        assert pooling_dist in [0, 1]
+        skeletal_pooling_dist = self.skeletal_pooling_dist_1 if pooling_dist == 1 else self.skeletal_pooling_dist_0
+
+        return StaticSubLayer(self.parents_list[layer],
+                              skeletal_pooling_dist[layer - 1],
+                              self.enable_global_position,
+                              self.foot_indexes[layer] if self.enable_foot_contact else [])
+
+    def hierarchical_keep_dim_layer(self, layer: int) -> StaticSubLayer:
+        return StaticSubLayer.keep_dim_layer(self.parents_list[layer],
+                                             self.enable_global_position,
+                                             self.foot_indexes[layer] if self.enable_foot_contact else [])
+    
+    def number_of_joints_in_hierarchical_levels(self) -> [int]:
+        return [len(parents) + self.enable_global_position + len(feet) * self.enable_foot_contact
+                 for parents, feet in zip(self.parents_list, self.foot_indexes)]
 
     @staticmethod
     def _topology_degree(parents: [int]):
@@ -421,52 +464,6 @@ class StaticData:
 
         return all_parents[::-1], all_poolings[::-1]
 
-    def neighbors_by_distance(self, parents: [int], dist=1):
-        assert dist in [0, 1], 'distance larger than 1 is not supported yet'
-
-        neighbors = {joint_idx: [joint_idx] for joint_idx in range(len(parents))}
-        if dist == 0:  # code should be general to any distance. for now dist==1 is the largest supported
-            return neighbors
-
-        # handle non virtual joints
-        children = children_list(parents)
-
-        # for joint_idx in range(n_entities):
-        for dst, src in enumerate(parents):
-            # parent_idx = parents[joint_idx]
-            if src not in [-1, -2] and not isinstance(src, tuple):
-                # -1 is the parent of root. -2 is the parent of global location, tuple for foot_contact
-                neighbors[dst].append(src)  # add entity's parent
-            neighbors[dst].extend(children[dst])  # append all entity's children
-
-        # handle global pos virtual joint
-        if -2 in parents:  # Global position is enabled..
-            root_idx = parents.index(-1)
-            glob_pos_idx = parents.index(-2)
-
-            # global position should have same neighbors of root and should become his neighbors' neighbor
-            neighbors[glob_pos_idx].extend(neighbors[root_idx])
-            for root_neighbor in neighbors[root_idx]:
-                # changing the neighbors of root during iteration puts the new neighbor in the iteration
-                if root_neighbor != root_idx:
-                    neighbors[root_neighbor].append(glob_pos_idx)
-            neighbors[root_idx].append(glob_pos_idx)  # finally change root itself
-
-        # handle foot contact label virtual joint
-        foot_and_contact_label = [(i, parents[i][1]) for i in range(len(parents)) if
-                                  isinstance(parents[i], tuple) and parents[i][0] == -3]
-
-        # 'contact' joint should have same neighbors of related joint and should become his neighbors' neighbor
-        for foot_idx, contact_label_idx in foot_and_contact_label:
-            neighbors[contact_label_idx].extend(neighbors[foot_idx])
-            for foot_neighbor in neighbors[foot_idx]:
-                # changing the neighbors of root during iteration puts the new neighbor in the iteration
-                if foot_neighbor != foot_idx:
-                    neighbors[foot_neighbor].append(contact_label_idx)
-            neighbors[foot_idx].append(contact_label_idx)  # finally change foot itself
-
-        return neighbors
-
     def plot(self, parents, show=True):
         graph = nx.Graph()
         graph.add_edges_from(self.edge_list(parents))
@@ -485,12 +482,11 @@ class DynamicData:
         self.use_velocity = use_velocity
 
     def assert_shape_is_right(self):
-        assert self.motion.shape[-2] == len(self.static.parents_list[-1])
-        assert self.motion.shape[-3] == self.static.n_channels
-
         foot_contact_joints = self.static.foot_number if self.static.enable_foot_contact else 0
         global_position_joint = 1 if self.static.enable_global_position else 0
-        assert len(self.static.names) + global_position_joint + foot_contact_joints == self.motion.shape[-2]
+
+        assert self.motion.shape[-3] == self.static.n_channels
+        assert self.motion.shape[-2] == len(self.static.parents) + global_position_joint + foot_contact_joints
 
     @classmethod
     def init_from_bvh(cls, bvf_filepath: str, character_name: str,
@@ -656,7 +652,7 @@ class DebugDynamic(DynamicData):
 
     def foot_movement_index(self) -> float:
         """ calculate the amount of foot movement."""
-        foot_location = self.motion[..., self.static.foot_indexes()[-1], :].clone()  # B x K x feet x T
+        foot_location = self.motion[..., self.static.foot_indexes[-1], :].clone()  # B x K x feet x T
         foot_velocity = ((foot_location[..., 1:] - foot_location[..., :-1]) ** 2).sum(axis=1)  # B x feet x T
 
         return foot_velocity.sum(axis=1).sum(axis=1)
